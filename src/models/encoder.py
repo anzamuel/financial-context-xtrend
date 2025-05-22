@@ -68,9 +68,15 @@ class Encoder(nn.Module):
             n_heads=n_heads,
         )
         
+        self.ffn2 = nn.Sequential(
+            nn.Linear(self.hidden_dim, self.hidden_dim),
+            nn.ELU(),
+            nn.Linear(self.hidden_dim, self.hidden_dim)
+        )
+        
         self.ffn = nn.Sequential(
             nn.Linear(self.hidden_dim, self.hidden_dim),
-            nn.ReLU(),
+            nn.ELU(),
             nn.Linear(self.hidden_dim, self.hidden_dim)
         )
 
@@ -104,13 +110,15 @@ class Encoder(nn.Module):
 
         # 2. Self-attention over Vt (Eq. 17)
         Vt_prime = self._self_attention(Vt, Vt, Vt)  # (batch, num_contexts, hidden_dim)
+        
+        Vt_prime_2 = self.ffn2(Vt_prime)
 
         # 3. Compute queries qt for each target
         qt = self.temporal_block_query(target_x, static_s)  # (batch, target_len, hidden_dim)
 
         # 4. Cross-attention: for each target, attend over Kt (keys) and Vt' (values)
         # Output: (batch, target_len, hidden_dim)
-        representation = self._cross_attention(Kt, Vt_prime, qt)
+        representation = self._cross_attention(Kt, Vt_prime_2, qt)
         output = self.ffn(representation)
         return output  # (batch, target_len, hidden_dim)
     

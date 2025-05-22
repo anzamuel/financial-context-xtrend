@@ -5,7 +5,6 @@ from prep_data import prepare_batches
 from tqdm import tqdm
 from models.xtrend import XTrendModel
 
-
 TESTING = False
 # TRAIN_LAST_OUTPUT = 0  # more items in sequence is neccessary!
 TRAIN_LAST_OUTPUT = 1
@@ -52,8 +51,7 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print(device)
 
 
-
-all_segments = pd.read_pickle("pinnacle_contexts.pkl")
+all_segments = pd.read_pickle("prepped.pkl")
 all_segments['x'] = all_segments['x'].apply(lambda item: torch.from_numpy(item).unsqueeze(0))
 all_segments['y'] = all_segments['y'].apply(lambda item: torch.from_numpy(item).unsqueeze(0))
 

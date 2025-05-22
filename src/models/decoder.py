@@ -23,7 +23,7 @@ class Decoder(nn.Module):
         )
         self.ffn1 = nn.Sequential(
             nn.Linear(y_dim + encoder_hidden_dim, ffn_dim),
-            nn.ReLU(),
+            nn.ELU(),
             nn.Linear(ffn_dim, ffn_dim),
         )
         self.layer_norm_1 = nn.LayerNorm(ffn_dim)
@@ -35,13 +35,21 @@ class Decoder(nn.Module):
         # FFN2 outputs mu and sigma directly
         self.layer_norm_2 = nn.LayerNorm(ffn_dim)
         self.ffn2 = nn.Sequential(
+            nn.Linear(ffn_dim+static_dim, ffn_dim+static_dim),
+            nn.ELU(),
             nn.Linear(ffn_dim+static_dim, ffn_dim)
         )
         self.layer_norm_3 = nn.LayerNorm(ffn_dim)
-        self.ffn3 = nn.Linear(ffn_dim, mle_dim * 2)
+        self.ffn3 = nn.Sequential(
+            nn.Linear(ffn_dim, ffn_dim),
+            nn.ELU(),
+            nn.Linear(ffn_dim, mle_dim * 2)
+        )
         # Sharpe head takes [mu, sigma] as input
         self.sharpe_head = nn.Sequential(
-            nn.Linear(mle_dim * 2, sharpe_dim),
+            nn.Linear(mle_dim, mle_dim),
+            nn.ELU(),
+            nn.Linear(mle_dim, sharpe_dim),
             nn.Tanh()
         )
 
@@ -59,19 +67,24 @@ class Decoder(nn.Module):
             vsn_out.append(vsn_t)
         x_stacked = torch.stack(vsn_out, dim=1) 
         x_cat = torch.cat([x_stacked, encoder_out], dim=-1)
+        
         # FFN
         x_prime = self.layer_norm_1(self.ffn1(x_cat)) 
+        
         # LSTM
         lstm_out, _ = self.lstm(x_prime) 
         a_t = self.layer_norm_2(lstm_out + x_prime)
         static_expanded = static_s.unsqueeze(1).expand(-1, seq_len, -1)
+        
         # FFN2 outputs mu and sigma
         last_fnn = self.ffn2(torch.cat([a_t, static_expanded], dim=-1)) 
         mle_out = self.ffn3(self.layer_norm_3(last_fnn+a_t))
         mu, sigma = torch.chunk(mle_out, 2, dim=-1)  
-        # Concatenate mu and sigma for Sharpe head
-        sharpe_input = torch.cat([mu, sigma], dim=-1)  # (batch, target_len, mle_dim*2)
-        positions = self.sharpe_head(sharpe_input)  # (batch, target_len, sharpe_dim)
+        
+        # Reparameterization trick: sample z ~ N(mu, sigma^2)
+        eps = torch.randn_like(mu)
+        z = mu + sigma * eps  # (batch, target_len, mle_dim)
+        positions = self.sharpe_head(z)  # (batch, target_len, mle_dim)
         
         captured_positions = target_y * positions
         
