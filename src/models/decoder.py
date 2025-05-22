@@ -11,9 +11,8 @@ class Decoder(nn.Module):
         encoder_hidden_dim,
         static_dim=8,
         ffn_dim=64,
-        lstm_hidden_dim=64,
         sharpe_dim=1,
-        mle_dim=32,
+        mle_dim=64,
     ):
         super().__init__()
         self.vsn = VSN(

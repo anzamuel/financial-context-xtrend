@@ -82,7 +82,7 @@ model = XTrendModel(
     lstm_hidden_dim=64,
     n_heads=4,
     sharpe_dim=1,
-    mle_dim=1,
+    mle_dim=64,
     self_attention_type="ptmultihead",
     cross_attention_type="ptmultihead",
 ).to(device)

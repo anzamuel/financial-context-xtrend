@@ -10,12 +10,12 @@ class XTrendModel(nn.Module):
         y_dim,
         static_dim=8,
         encoder_hidden_dim=64,
-        vsn_dim=32,
+        vsn_dim=64,
         ffn_dim=64,
         lstm_hidden_dim=64,
         n_heads=4,
-        sharpe_dim=32,
-        mle_dim=32,
+        sharpe_dim=64,
+        mle_dim=64,
         self_attention_type="ptmultihead",
         cross_attention_type="ptmultihead",
     ):
@@ -39,7 +39,6 @@ class XTrendModel(nn.Module):
             encoder_hidden_dim=encoder_hidden_dim,
             static_dim=static_dim,
             ffn_dim=ffn_dim,
-            lstm_hidden_dim=lstm_hidden_dim,
             sharpe_dim=sharpe_dim,
             mle_dim=mle_dim,
         )
