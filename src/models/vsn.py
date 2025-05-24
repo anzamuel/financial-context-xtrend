@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class VSN(nn.Module):
-    def __init__(self, input_dim, hidden_dim, static_dim=None, use_static=True):
+    def __init__(self, input_dim, hidden_dim, static_dim=None, use_static=True, dropout = 0.5):
         """
         input_dim: number of input features |𝓧|
         hidden_dim: output embedding dimension per feature
@@ -19,7 +19,7 @@ class VSN(nn.Module):
             nn.Sequential(
                 nn.Linear(1, hidden_dim),
                 nn.ELU(),
-                nn.Dropout(p=0.3),
+                nn.Dropout(p=dropout),
                 nn.Linear(hidden_dim, hidden_dim),
             ) for _ in range(input_dim)
         ])

@@ -73,19 +73,21 @@ valid_contexts = targets[
 all_tickers = all_segments['ticker'].unique()
 ticker2id = {ticker: idx for idx, ticker in enumerate(all_tickers)}
 
+hidden_dim = 64
 model = XTrendModel(
     x_dim=8,
     y_dim=1,
     static_dim=8,
-    encoder_hidden_dim=32,
-    vsn_dim=32,
-    ffn_dim=32,
-    lstm_hidden_dim=32,
+    encoder_hidden_dim=hidden_dim,
+    vsn_dim=hidden_dim,
+    ffn_dim=hidden_dim,
+    lstm_hidden_dim=hidden_dim,
     n_heads=4,
     sharpe_dim=1,
-    mle_dim=32,
+    mle_dim=hidden_dim,
     self_attention_type="ptmultihead",
     cross_attention_type="ptmultihead",
+    dropout=0.3
 ).to(device)
 
 # Set up the optimizer and train step

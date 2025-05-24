@@ -4,10 +4,10 @@ import torch.nn.functional as F
 from models.vsn import VSN
 
 class TemporalBlock(nn.Module):
-    def __init__(self, input_dim, static_dim, vsn_hidden_dim, lstm_hidden_dim, ffn_hidden_dim):
+    def __init__(self, input_dim, static_dim, vsn_hidden_dim, lstm_hidden_dim, ffn_hidden_dim, dropout = 0.5):
         super().__init__()
 
-        self.vsn = VSN(input_dim, vsn_hidden_dim, static_dim, use_static=True)
+        self.vsn = VSN(input_dim, vsn_hidden_dim, static_dim, use_static=True, dropout=dropout)
 
         self.lstm = nn.LSTM(
             input_size=vsn_hidden_dim,
@@ -20,14 +20,14 @@ class TemporalBlock(nn.Module):
         self.ffn_3 = nn.Sequential(
             nn.Linear(static_dim, lstm_hidden_dim),
             nn.ELU(),
-            nn.Dropout(p=0.3),
+            nn.Dropout(p=dropout),
             nn.Linear(lstm_hidden_dim, lstm_hidden_dim)
         )
         
         self.ffn_4 = nn.Sequential(
             nn.Linear(static_dim, lstm_hidden_dim),
             nn.ELU(),
-            nn.Dropout(p=0.3),
+            nn.Dropout(p=dropout),
             nn.Linear(lstm_hidden_dim, lstm_hidden_dim)
         )
         

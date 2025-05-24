@@ -13,17 +13,19 @@ class Decoder(nn.Module):
         ffn_dim=64,
         sharpe_dim=1,
         mle_dim=64,
+        dropout=0.5,
     ):
         super().__init__()
         self.vsn = VSN(
             input_dim=x_dim,
             hidden_dim=y_dim,
             static_dim=static_dim,
+            dropout = dropout,
         )
         self.ffn1 = nn.Sequential(
             nn.Linear(y_dim + encoder_hidden_dim, ffn_dim),
             nn.ELU(),
-            nn.Dropout(0.3),
+            nn.Dropout(dropout),
             nn.Linear(ffn_dim, ffn_dim),
         )
         self.layer_norm_1 = nn.LayerNorm(ffn_dim)
@@ -46,14 +48,14 @@ class Decoder(nn.Module):
         self.ffn3 = nn.Sequential(
             nn.Linear(ffn_dim, ffn_dim),
             nn.ELU(),
-            nn.Dropout(0.3),
+            nn.Dropout(dropout),
             nn.Linear(ffn_dim, mle_dim * 2)
         )
         # Sharpe head takes [mu, sigma] as input
         self.sharpe_head = nn.Sequential(
             nn.Linear(mle_dim, mle_dim),
             nn.ELU(),
-            nn.Dropout(0.3),
+            nn.Dropout(dropout),
             nn.Linear(mle_dim, sharpe_dim),
             nn.Tanh()
         )

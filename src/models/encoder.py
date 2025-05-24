@@ -18,6 +18,7 @@ class Encoder(nn.Module):
         vsn_dim=32,
         ffn_dim=64,
         lstm_hidden_dim=32,
+        dropout = 0.5,
     ):
         super().__init__()
         self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
@@ -36,6 +37,7 @@ class Encoder(nn.Module):
             vsn_hidden_dim=vsn_dim,
             lstm_hidden_dim=lstm_hidden_dim,
             ffn_hidden_dim=ffn_dim,
+            dropout=dropout,
         )
         self.temporal_block_key = TemporalBlock(
             input_dim=x_dim,
@@ -43,6 +45,7 @@ class Encoder(nn.Module):
             vsn_hidden_dim=vsn_dim,
             lstm_hidden_dim=lstm_hidden_dim,
             ffn_hidden_dim=ffn_dim,
+            dropout=dropout,
         )
         
         self.temporal_block_query = TemporalBlock(
@@ -51,6 +54,7 @@ class Encoder(nn.Module):
             vsn_hidden_dim=vsn_dim,
             lstm_hidden_dim=lstm_hidden_dim,
             ffn_hidden_dim=ffn_dim,
+            dropout=dropout,
         )
 
 
@@ -69,14 +73,14 @@ class Encoder(nn.Module):
         self.ffn2 = nn.Sequential(
             nn.Linear(self.hidden_dim, self.hidden_dim),
             nn.ELU(),
-            nn.Dropout(0.3),
+            nn.Dropout(dropout),
             nn.Linear(self.hidden_dim, self.hidden_dim)
         )
         
         self.ffn = nn.Sequential(
             nn.Linear(self.hidden_dim, self.hidden_dim),
             nn.ELU(),
-            nn.Dropout(0.3),
+            nn.Dropout(dropout),
             nn.Linear(self.hidden_dim, self.hidden_dim)
         )
         self.layer_norm = nn.LayerNorm(self.hidden_dim)

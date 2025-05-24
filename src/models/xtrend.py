@@ -18,6 +18,7 @@ class XTrendModel(nn.Module):
         mle_dim=64,
         self_attention_type="ptmultihead",
         cross_attention_type="ptmultihead",
+        dropout=0.5,
     ):
         super().__init__()
         self.encoder = Encoder(
@@ -32,6 +33,7 @@ class XTrendModel(nn.Module):
             vsn_dim=vsn_dim,
             ffn_dim=ffn_dim,
             lstm_hidden_dim=lstm_hidden_dim,
+            dropout=dropout
         )
         self.decoder = Decoder(
             x_dim=x_dim,
@@ -41,6 +43,7 @@ class XTrendModel(nn.Module):
             ffn_dim=ffn_dim,
             sharpe_dim=sharpe_dim,
             mle_dim=mle_dim,
+            dropout=dropout
         )
         self.embedding = nn.Embedding(num_embeddings=50,embedding_dim=static_dim)
 
