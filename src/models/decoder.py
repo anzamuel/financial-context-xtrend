@@ -23,6 +23,7 @@ class Decoder(nn.Module):
         self.ffn1 = nn.Sequential(
             nn.Linear(y_dim + encoder_hidden_dim, ffn_dim),
             nn.ELU(),
+            nn.Dropout(0.3),
             nn.Linear(ffn_dim, ffn_dim),
         )
         self.layer_norm_1 = nn.LayerNorm(ffn_dim)
@@ -33,21 +34,26 @@ class Decoder(nn.Module):
         )
         # FFN2 outputs mu and sigma directly
         self.layer_norm_2 = nn.LayerNorm(ffn_dim)
-        self.ffn2 = nn.Sequential(
-            nn.Linear(ffn_dim+static_dim, ffn_dim+static_dim),
+        
+        self.linear1 = nn.Linear(ffn_dim, ffn_dim)
+        self.linear2 = nn.Linear(static_dim, ffn_dim)
+        
+        self.linear3 = nn.Sequential(
             nn.ELU(),
-            nn.Linear(ffn_dim+static_dim, ffn_dim)
+            nn.Linear(ffn_dim, ffn_dim)
         )
         self.layer_norm_3 = nn.LayerNorm(ffn_dim)
         self.ffn3 = nn.Sequential(
             nn.Linear(ffn_dim, ffn_dim),
             nn.ELU(),
+            nn.Dropout(0.3),
             nn.Linear(ffn_dim, mle_dim * 2)
         )
         # Sharpe head takes [mu, sigma] as input
         self.sharpe_head = nn.Sequential(
             nn.Linear(mle_dim, mle_dim),
             nn.ELU(),
+            nn.Dropout(0.3),
             nn.Linear(mle_dim, sharpe_dim),
             nn.Tanh()
         )
@@ -60,29 +66,32 @@ class Decoder(nn.Module):
         """
         # VSN block
         batch_size, seq_len, _ = target_x.shape
-        vsn_out = []
-        for t in range(seq_len):
-            vsn_t = self.vsn(target_x[:, t], static_s)  
-            vsn_out.append(vsn_t)
-        x_stacked = torch.stack(vsn_out, dim=1) 
-        x_cat = torch.cat([x_stacked, encoder_out], dim=-1)
-        
+        target_x_flat = target_x.reshape(-1, target_x.shape[-1])  # (batch * seq_len, x_dim)
+        static_s_flat = static_s.unsqueeze(1).expand(-1, seq_len, -1).reshape(-1, static_s.shape[-1])  # (batch * seq_len, static_dim)
+        vsn_out_flat = self.vsn(target_x_flat, static_s_flat)  # (batch * seq_len, y_dim)
+        vsn_out = vsn_out_flat.view(batch_size, seq_len, -1)   # (batch, seq_len, y_dim)
+        x_cat = torch.cat([vsn_out, encoder_out], dim=-1)
         # FFN
         x_prime = self.layer_norm_1(self.ffn1(x_cat)) 
         
         # LSTM
+        
         lstm_out, _ = self.lstm(x_prime) 
         a_t = self.layer_norm_2(lstm_out + x_prime)
         static_expanded = static_s.unsqueeze(1).expand(-1, seq_len, -1)
         
         # FFN2 outputs mu and sigma
-        last_fnn = self.ffn2(torch.cat([a_t, static_expanded], dim=-1)) 
+        last_fnn = self.linear3(self.linear1(a_t)+self.linear2(static_expanded))
         mle_out = self.ffn3(self.layer_norm_3(last_fnn+a_t))
-        mu, sigma = torch.chunk(mle_out, 2, dim=-1)  
+        mu, logsigma = torch.chunk(mle_out, 2, dim=-1)  
         
+        sigma = torch.exp(logsigma).clamp(min = -10, max = 10)
         # Reparameterization trick: sample z ~ N(mu, sigma^2)
-        eps = torch.randn_like(mu)
-        z = mu + sigma * eps  # (batch, target_len, mle_dim)
+        if testing:
+            z = mu
+        else:
+            eps = torch.randn_like(mu)
+            z = mu + sigma * eps  # (batch, target_len, mle_dim)
         positions = self.sharpe_head(z)  # (batch, target_len, mle_dim)
         
         captured_positions = target_y * positions
@@ -95,4 +104,4 @@ class Decoder(nn.Module):
         sharpe = (
             torch.mean(captured_positions) / (torch.std(captured_positions) + 1e-9)
         ) * np.sqrt(252.0)
-        return -sharpe, mu, sigma
+        return -sharpe, mu, logsigma

@@ -53,8 +53,6 @@ class Encoder(nn.Module):
             ffn_hidden_dim=ffn_dim,
         )
 
-        if embedding_dim != hidden_dim_list[-1]:
-            print("Warning, Check the dim of latent z and the dim of mlp last layer!")
 
         self._self_attention = Attention(
             self.hidden_dim,
@@ -71,57 +69,41 @@ class Encoder(nn.Module):
         self.ffn2 = nn.Sequential(
             nn.Linear(self.hidden_dim, self.hidden_dim),
             nn.ELU(),
+            nn.Dropout(0.3),
             nn.Linear(self.hidden_dim, self.hidden_dim)
         )
         
         self.ffn = nn.Sequential(
             nn.Linear(self.hidden_dim, self.hidden_dim),
             nn.ELU(),
+            nn.Dropout(0.3),
             nn.Linear(self.hidden_dim, self.hidden_dim)
         )
+        self.layer_norm = nn.LayerNorm(self.hidden_dim)
 
 
     def forward(self, context_x, context_y, target_x=None, static_s=None):
         batch_sz, context_len, _, num_contexts = context_x.shape
         _, target_len, _ = target_x.shape
 
-        # 1. Compute Vt (values) and Kt (keys) for each context
-        # We'll aggregate over context_len (sequence) for each context
-        Vt = []
-        Kt = []
-        for i in range(num_contexts):
-            # Value: concat x and y, then temporal block
-            encoder_input = torch.cat(
-                [context_x[:, :, :, i], context_y[:, :, :, i]], dim=-1
-            )  # (batch, context_len, x_dim + y_dim)
-            v_i = self.temporal_block(encoder_input, static_s)  # (batch, context_len, hidden_dim)
-            # Aggregate over context_len (e.g., mean)
-            v_i = v_i.mean(dim=1)  # (batch, hidden_dim)
-            Vt.append(v_i.unsqueeze(1))  # (batch, 1, hidden_dim)
+        # Vectorized context processing
+        encoder_input = torch.cat([context_x, context_y], dim=2)  # (batch, context_len, x_dim + y_dim, num_contexts)
+        encoder_input = encoder_input.permute(0, 3, 1, 2).reshape(batch_sz * num_contexts, context_len, -1)
+        context_x_reshaped = context_x.permute(0, 3, 1, 2).reshape(batch_sz * num_contexts, context_len, -1)
+        static_s_expanded = static_s.unsqueeze(1).expand(-1, num_contexts, -1).reshape(batch_sz * num_contexts, -1)
 
-            # Key: just x, then temporal block
-            k_i = self.temporal_block_key(context_x[:, :, :, i], static_s)  # (batch, context_len, hidden_dim)
-            k_i = k_i.mean(dim=1)  # (batch, hidden_dim)
-            Kt.append(k_i.unsqueeze(1))  # (batch, 1, hidden_dim)
+        v_i = self.temporal_block(encoder_input, static_s_expanded).mean(dim=1)
+        Vt = v_i.view(batch_sz, num_contexts, -1)
+        k_i = self.temporal_block_key(context_x_reshaped, static_s_expanded).mean(dim=1)
+        Kt = k_i.view(batch_sz, num_contexts, -1)
 
-        # Stack over contexts
-        Vt = torch.cat(Vt, dim=1)  # (batch, num_contexts, hidden_dim)
-        Kt = torch.cat(Kt, dim=1)  # (batch, num_contexts, hidden_dim)
-
-        # 2. Self-attention over Vt (Eq. 17)
-        Vt_prime = self._self_attention(Vt, Vt, Vt)  # (batch, num_contexts, hidden_dim)
-        
+        Vt_prime = self._self_attention(Vt, Vt, Vt)
         Vt_prime_2 = self.ffn2(Vt_prime)
-
-        # 3. Compute queries qt for each target
-        qt = self.temporal_block_query(target_x, static_s)  # (batch, target_len, hidden_dim)
-
-        # 4. Cross-attention: for each target, attend over Kt (keys) and Vt' (values)
-        # Output: (batch, target_len, hidden_dim)
+        qt = self.temporal_block_query(target_x, static_s)
         representation = self._cross_attention(Kt, Vt_prime_2, qt)
         output = self.ffn(representation)
-        return output  # (batch, target_len, hidden_dim)
-    
+        norm_output = self.layer_norm(output)
+        return norm_output
 
 if __name__ == "__main__":
     torch.manual_seed(0)

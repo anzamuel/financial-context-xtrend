@@ -18,15 +18,18 @@ class VSN(nn.Module):
         self.feature_mlps = nn.ModuleList([
             nn.Sequential(
                 nn.Linear(1, hidden_dim),
-                nn.ELU()
+                nn.ELU(),
+                nn.Dropout(p=0.3),
+                nn.Linear(hidden_dim, hidden_dim),
             ) for _ in range(input_dim)
         ])
 
-        self.attn_input_dim = input_dim + (static_dim if use_static else 0)
-        self.attn_ffn = nn.Sequential(
-            nn.Linear(self.attn_input_dim, input_dim),
+        self.linear1 = nn.Linear(input_dim, hidden_dim)
+        self.linear2 = nn.Linear(static_dim, hidden_dim)
+        
+        self.linear3 = nn.Sequential(
             nn.ELU(),
-            nn.Linear(input_dim, input_dim)
+            nn.Linear(hidden_dim, input_dim)
         )
 
     def forward(self, x_t, s=None):
@@ -45,13 +48,8 @@ class VSN(nn.Module):
 
         features = torch.stack(transformed, dim=1)  # (batch, input_dim, hidden_dim)
 
-        if self.use_static and s is not None:
-            combined = torch.cat([x_t, s], dim=-1)  # (batch, input_dim + static_dim)
-        else:
-            combined = x_t  # (batch, input_dim)
-
-        logits = self.attn_ffn(combined)  # (batch, input_dim)
-        weights = F.softmax(logits, dim=-1)  # (batch, input_dim)
+        ffn = self.linear3(self.linear1(x_t)+self.linear2(s))
+        weights = F.softmax(ffn, dim=-1)  # (batch, input_dim)
 
         weights = weights.unsqueeze(-1)  # (batch, input_dim, 1)
         vsn_out = (features * weights).sum(dim=1)  # (batch, hidden_dim)

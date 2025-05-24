@@ -25,7 +25,7 @@ REMOVE_FIRST_N_OUTPUTS = 0
 N = 50
 
 # LR = 0.001
-LR = 0.01
+LR = 1e-3
 
 # LEN_CONTEXT = 6
 # BATCH_SIZE = 256
@@ -44,7 +44,6 @@ USE_SELF_ATTENTION = True
 VALID_START_YEAR = 2005  # valid 2015-208
 
 TEST_START_YEAR = 2010  # valid 2015-208
-
 
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -71,18 +70,20 @@ valid_contexts = targets[
     & (targets.date.dt.year < TEST_START_YEAR)
 ]
 
+all_tickers = all_segments['ticker'].unique()
+ticker2id = {ticker: idx for idx, ticker in enumerate(all_tickers)}
 
 model = XTrendModel(
     x_dim=8,
     y_dim=1,
     static_dim=8,
-    encoder_hidden_dim=64,
-    vsn_dim=64,
-    ffn_dim=64,
-    lstm_hidden_dim=64,
+    encoder_hidden_dim=32,
+    vsn_dim=32,
+    ffn_dim=32,
+    lstm_hidden_dim=32,
     n_heads=4,
     sharpe_dim=1,
-    mle_dim=64,
+    mle_dim=32,
     self_attention_type="ptmultihead",
     cross_attention_type="ptmultihead",
 ).to(device)
@@ -102,14 +103,13 @@ for it in range(ITERATIONS):
     print(len(batches))
     print("Ready")
     pbar = tqdm(batches, desc=f"Iteration {it} | Train Sharpe: N/A", leave=True)
-    for seq_len, x_context, y_context, x_target, y_target, _, _ in pbar:
+    for seq_len, x_context, y_context, x_target, y_target, _, tickers in pbar:
         x_context = x_context.to(device)
         y_context = y_context.to(device)
         x_target = x_target.to(device)
         y_target = y_target.to(device)
-        # Dummy static_s for now (replace with real static features if available)
-        static_s = torch.zeros(x_context.shape[0], 8, device=device)
-
+        
+        static_s = torch.tensor([ticker2id[ticker] for ticker in tickers], device=device)
         total_loss, sharpe_loss, mle_loss = model.training_step(
             (x_context, y_context, x_target, y_target, static_s), optimizer, alpha=1.0
         )
@@ -144,7 +144,7 @@ for it in range(ITERATIONS):
         y_context = y_context.to(device)
         x_target = x_target.to(device)
         y_target = y_target.to(device)
-        static_s = torch.zeros(x_context.shape[0], 8, device=device)
+        static_s = torch.tensor([ticker2id[ticker] for ticker in tickers], device=device)
 
         sharpe_loss = model.evaluate(
             (x_context, y_context, x_target, y_target, static_s), alpha=1.0

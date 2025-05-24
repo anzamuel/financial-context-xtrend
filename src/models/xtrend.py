@@ -42,6 +42,7 @@ class XTrendModel(nn.Module):
             sharpe_dim=sharpe_dim,
             mle_dim=mle_dim,
         )
+        self.embedding = nn.Embedding(num_embeddings=50,embedding_dim=static_dim)
 
     def forward(self, context_x, context_y, target_x, target_y, static_s, testing=False):
         """
@@ -52,30 +53,35 @@ class XTrendModel(nn.Module):
         static_s: (batch, static_dim)
         """
         # Encoder: get Kt, Vt, Vt_prime
-        encoder_out = self.encoder(context_x, context_y, target_x, static_s)
+        embedding_s = self.embedding(static_s)
+        encoder_out = self.encoder(context_x, context_y, target_x, embedding_s)
         
         if testing:
-            return self.decoder(target_x, target_y, static_s, encoder_out, testing=testing)
+            return self.decoder(target_x, target_y, embedding_s, encoder_out, testing=testing)
         # Decoder: get outputs
-        sharpe_loss, mu, sigma = self.decoder(target_x, target_y, static_s, encoder_out)
-        return sharpe_loss, mu, sigma
+        sharpe_loss, mu, logsigma = self.decoder(target_x, target_y, embedding_s, encoder_out)
+        return sharpe_loss, mu, logsigma
 
     def training_step(self, batch, optimizer, alpha=1.0):
+        self.train()
         context_x, context_y, target_x, target_y, static_s = batch
-        sharpe_loss, mu, sigma = self.forward(context_x, context_y, target_x, target_y, static_s)
+        sharpe_loss, mu, logsigma = self.forward(context_x, context_y, target_x, target_y, static_s)
 
         # MLE loss (negative log-likelihood)
-        dist = torch.distributions.Normal(mu, sigma.clamp(min=1e-6))
+        dist = torch.distributions.Normal(mu, torch.exp(logsigma.clamp(min=-10, max = 10)))
         mle_loss = -dist.log_prob(target_y).mean()
 
         total_loss = sharpe_loss + alpha * mle_loss
 
         optimizer.zero_grad()
         total_loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=1.0)
         optimizer.step()
         return total_loss.item(), sharpe_loss.item(), mle_loss.item()
 
     def evaluate(self, batch, alpha=1.0):
-        context_x, context_y, target_x, target_y, static_s = batch
-        return self.forward(context_x, context_y, target_x, target_y, static_s, testing=True)
+        self.eval()
+        with torch.no_grad():
+            context_x, context_y, target_x, target_y, static_s = batch
+            return self.forward(context_x, context_y, target_x, target_y, static_s, testing=True)
             
