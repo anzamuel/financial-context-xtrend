@@ -23,7 +23,7 @@ FEATURES = [
     "macd_32_96"
 ]
 TEST_YEAR_START = 2015
-TEST_END = 2025
+TEST_END = 2020
 PINNACLE_ASSETS = [ "AN", "BN", "CA", "CC", "CN", "DA", "DT", "DX", "EN", "ER", "ES", "FB", "FN", "GI", "JN", "JO", "KC", "KW", "LB", "LX", "MD", "MP", "NK", "NR", "SB", "SC", "SN", "SP", "TY", "UB", "US", "XU", "XX", "YM", "ZA", "ZC", "ZF", "ZG", "ZH", "ZI", "ZK", "ZL", "ZN", "ZO", "ZP", "ZR", "ZT", "ZU", "ZW", "ZZ" ]
 # <<<< TODO: DO NOT TOUCH ANYTHING BELOW THIS! I AM WORKING ON IT >>>>
 # %% function split_dataframe
@@ -151,4 +151,5 @@ train_data_prepped_all_segments = pd.DataFrame(
 
 # %% save to pickle
 train_data_prepped_all_segments.to_pickle(f"pinnacle_contexts.pkl")
+train_data_prepped_all_segments.to_csv(f"pinnacle_contexts.csv")
 # <<<< TODO: DO NOT TOUCH ANYTHING ABOVE THIS! I AM WORKING ON IT >>>>

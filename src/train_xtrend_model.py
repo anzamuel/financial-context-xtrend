@@ -68,7 +68,7 @@ print(device)
 
 # %% READ CONTEXT DATA
 # Removed if TESTING: ...
-all_segments = pd.read_pickle("pinnacle_contexts.pkl")
+all_segments = pd.read_pickle("context_data.pkl")
 all_segments['x'] = all_segments['x'].apply(lambda item: torch.from_numpy(item).unsqueeze(0))
 all_segments['y'] = all_segments['y'].apply(lambda item: torch.from_numpy(item).unsqueeze(0))
 
