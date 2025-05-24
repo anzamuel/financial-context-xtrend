@@ -2,7 +2,6 @@
 #%cd /Users/sammy/Desktop/financial-context-xtrend
 
 # %% imports
-import math
 import pandas as pd
 import numpy as np
 import datetime as dt
@@ -11,7 +10,6 @@ from tqdm.auto import tqdm
 import os
 import matplotlib.pyplot as plt
 import itertools
-import numpy as np
 import matplotlib.dates as mdates
 from matplotlib.patches import Patch
 
@@ -41,8 +39,9 @@ DRAW_PLOTS = False
 # PINNACLE_ASSETS_TRAIN = [ "CC", "DA", "CA", "LB", "SB", "ZA", "ZC", "ZF", ZI ]
 
 # contexts = []
-for ticker in (pbar := tqdm(PINNACLE_ASSETS, dynamic_ncols=True)):
-    pbar.set_description(ticker)
+ticker_pbar = tqdm(PINNACLE_ASSETS, dynamic_ncols=True)
+for ticker in ticker_pbar:
+    ticker_pbar.set_description(ticker)
 
     # %% RUN TASKS
     features_df = pd.read_csv(f"dataset/FEATURES/{ticker}.csv", parse_dates=["date"])
@@ -120,13 +119,20 @@ for ticker in (pbar := tqdm(PINNACLE_ASSETS, dynamic_ncols=True)):
     os.makedirs(os.path.join(base_dir, "train"), exist_ok=True)
     os.makedirs(os.path.join(base_dir, "test"), exist_ok=True)
     os.makedirs(ticker_dir, exist_ok=True)
+    ticker_metadata = []
 
     with tqdm(total=len(regimes), desc=f"{ticker} segments", leave=False) as segment_pbar:
         for i, segment in enumerate(regimes):
             start_idx, end_idx = segment[0], segment[1]
             segmented_features_df = features_df.loc[start_idx:end_idx].copy()
+            segmented_features_df = segmented_features_df.reset_index().set_index("date")
+            segmented_features_df = segmented_features_df[FEATURES + ["next_day_norm_return"]]
 
-            file_path = os.path.join(ticker_dir, f"context_{i:03d}_{ticker}.parquet")
+            start_date = segmented_features_df.index.min().strftime('%Y%m%d')
+            end_date = segmented_features_df.index.max().strftime('%Y%m%d')
+
+            file_name = f"context_{i:03d}_{ticker}_{start_date}_{end_date}.parquet"
+            file_path = os.path.join(ticker_dir, file_name)
             segmented_features_df.to_parquet(file_path, index=True)
 
             segment_pbar.update(1)
