@@ -71,5 +71,11 @@ class XTrendDataset(Dataset):
 if __name__ == "__main__":
     dataset = XTrendDataset()
     print(len(dataset))
-    print(dataset[42])
-    print(dataset[42])
+    sample = dataset[42]
+    print(sample)
+    print("target_x shape:", list(sample["target_x"].shape))
+    print("target_y shape:", list(sample["target_y"].shape))
+    print("target_s shape:", list(sample["target_s"].shape))
+    print("content_x shapes:", [list(tensor.shape) for tensor in sample["context_x_list"]])
+    print("context_xi shapes:", [list(tensor.shape) for tensor in sample["context_xi_list"]])
+    print("context_s shapes:", [list(tensor.shape) for tensor in sample["context_s_list"]])
