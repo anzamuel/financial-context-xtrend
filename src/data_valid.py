@@ -36,7 +36,7 @@ class XTrendDatasetValid(Dataset):
             self.context_tensors.append((ticker_idx, x_tensor, xi_tensor))
 
     def __len__(self):
-        return len(self.targets)
+        return len(self.target_definitions)
 
     def __getitem__(self, idx):
         target_info = self.target_definitions[idx]

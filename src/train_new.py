@@ -98,21 +98,25 @@ for it in range(ITERATIONS):
             (target_x, target_y, target_s, context_x_list, context_xi_list, context_s_list)
         )
         captured_returns = sharpe_loss
-        if captured_returns.shape[0] == BATCH_SIZE:
-            valid_sharpes.append(
-                (
-                    torch.mean(captured_returns)
-                    / (torch.std(captured_returns) + 1e-9)
-                    * np.sqrt(252.0)
-                )
-                .detach()
-                .item()
+        valid_sharpes.append(
+            (
+                torch.mean(captured_returns)
+                / (torch.std(captured_returns) + 1e-9)
+                * np.sqrt(252.0)
             )
+            .detach()
+            .item()
+        )
         captured_returns = sharpe_loss[:, -1, 0].tolist()
-        all_returns += captured_returns
+        all_returns += zip(target_s, captured_returns)
 
-        if VAL_DIVERSIFIED_SHARPE and all_returns:
-            diversified = np.array(all_returns)
-            val_sharpe = diversified.mean() * np.sqrt(252) / (diversified.std() + 1e-9)
+        if VAL_DIVERSIFIED_SHARPE:
+            diversified = (
+                pd.DataFrame(all_returns, columns=["ticker", "captured_returns"])
+                .groupby("ticker")["captured_returns"]
+                .sum()
+            )
+            val_sharpe = diversified.mean() * np.sqrt(252) / diversified.std()
+            # print(valid_sharpes)
             print("Div Valid Sharpe: ", val_sharpe)
             print("Valid Single Sharpe: ", np.mean(valid_sharpes))
