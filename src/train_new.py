@@ -27,9 +27,9 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print(device)
 
 dataset = XTrendDataset()
-dataloader = DataLoader(dataset, batch_size = BATCH_SIZE, collate_fn = xtrend_collate_fn, pin_memory = True, shuffle=True)
+dataloader = DataLoader(dataset, batch_size = BATCH_SIZE, collate_fn = xtrend_collate_fn,  shuffle=True)
 dataset_valid = XTrendDatasetValid()
-dataloader_valid  = DataLoader(dataset_valid, batch_size = BATCH_SIZE, collate_fn = xtrend_collate_fn, pin_memory = True, shuffle=True)
+dataloader_valid  = DataLoader(dataset_valid, batch_size = BATCH_SIZE, collate_fn = xtrend_collate_fn,  shuffle=True)
 
 hidden_dim = 32
 model = XTrendModel(

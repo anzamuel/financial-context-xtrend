@@ -87,6 +87,6 @@ class XTrendModel(nn.Module):
     def evaluate(self, batch):
         self.eval()
         with torch.no_grad():
-            context_x, context_y, target_x, target_y, static_s = batch
-            return self.forward(context_x, context_y, target_x, target_y, static_s, testing=True)
+            target_x, target_y, target_s, context_x_list, context_xi_list, context_s_list = batch
+            return self.forward(target_x, target_y, target_s, context_x_list, context_xi_list, context_s_list, testing=True)
             
