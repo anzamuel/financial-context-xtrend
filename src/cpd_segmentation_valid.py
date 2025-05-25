@@ -31,6 +31,7 @@ FEATURE_COLS = [
 ]
 VALUE_COL = "next_day_norm_return"
 TEST_YEAR_START = 2015
+TEST_YEAR_END = 2020
 PINNACLE_ASSETS = [ "AN", "BN", "CA", "CC", "CN", "DA", "DT", "DX", "EN", "ER", "ES", "FB", "FN", "GI", "JN", "JO", "KC", "KW", "LB", "LX", "MD", "MP", "NK", "NR", "SB", "SC", "SN", "SP", "TY", "UB", "US", "XU", "XX", "YM", "ZA", "ZC", "ZF", "ZG", "ZH", "ZI", "ZK", "ZL", "ZN", "ZO", "ZP", "ZR", "ZT", "ZU", "ZW", "ZZ" ]
 # PINNACLE_ASSETS_TRAIN = ["CC", "DA", "LB", "SB", "ZA", "ZC", "ZF", "ZI", "ZO", "ZR", "ZU", "ZW", "ZZ", "EN", "ES", "MD", "SC", "SP", "XX", "YM", "DT", "FB", "TY", "UB", "US", "AN", "DX", "FN", "JN", "SN"]
 # PINNACLE_ASSETS_TEST = ["GI", "JO", "KC", "KW", "NR", "ZG", "ZH", "ZK", "ZL", "ZN", "ZP", "ZT", "CA", "ER", "LX", "NK", "XU", "BN", "CN", "MP"]
@@ -124,11 +125,11 @@ def create_targets_and_contexts(target_len = 126, write_to_disk = False, draw_pl
         # %% RUN TASKS
         features_df = pd.read_csv(f"dataset/FEATURES/{ticker}.csv", parse_dates=["date"])
         features_df[VALUE_COL] = features_df["norm_daily_return"].shift(-1)
-        features_df = features_df[features_df.date <= dt.datetime(TEST_YEAR_START, 1, 1)]
+        features_df = features_df[features_df.date > dt.datetime(TEST_YEAR_START, 1, 1)]
+        features_df = features_df[features_df.date <= dt.datetime(TEST_YEAR_END, 1, 1)]
         if features_df.empty:
             tqdm.write(f"Warning: Ticker {ticker} has no data before year {TEST_YEAR_START}. Skipping.")
             continue
-        features_df = features_df[features_df.date < dt.datetime(TEST_YEAR_START, 1, 1)]
         features_df = features_df[["date", "close"] + FEATURE_COLS + [VALUE_COL]]
         #features_df.dropna(inplace=True)
 
@@ -145,7 +146,7 @@ def create_targets_and_contexts(target_len = 126, write_to_disk = False, draw_pl
             })
 
         if write_to_disk:
-            base_dir = "dataset_targets"
+            base_dir = "dataset_targets_valid"
             os.makedirs(base_dir, exist_ok=True)
             file_name = f"target_{ticker}.parquet"
             file_path = os.path.join(base_dir, file_name)
@@ -213,7 +214,7 @@ def create_targets_and_contexts(target_len = 126, write_to_disk = False, draw_pl
         #dataset_type = "train" if ticker in PINNACLE_ASSETS_TRAIN else "test"
 
         if write_to_disk:
-            cpd_contexts_base_dir = "dataset_cpd_contexts"
+            cpd_contexts_base_dir = "dataset_cpd_contexts_valid"
             cpd_contexts_ticker_dir = os.path.join(cpd_contexts_base_dir, ticker)
             os.makedirs(cpd_contexts_ticker_dir, exist_ok=True)
 
