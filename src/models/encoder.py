@@ -86,24 +86,24 @@ class Encoder(nn.Module):
         self.layer_norm = nn.LayerNorm(self.hidden_dim)
 
 
-    def forward(self, context_x, context_y, target_x=None, static_s=None):
+    def forward(self, context_x, context_xi, target_x=None, 
+        embedding_context_s = None, embedding_target_s=None):
         batch_sz, context_len, _, num_contexts = context_x.shape
-        _, target_len, _ = target_x.shape
 
         # Vectorized context processing
-        encoder_input = torch.cat([context_x, context_y], dim=2)  # (batch, context_len, x_dim + y_dim, num_contexts)
-        encoder_input = encoder_input.permute(0, 3, 1, 2).reshape(batch_sz * num_contexts, context_len, -1)
+        encoder_input = context_xi.permute(0, 3, 1, 2).reshape(batch_sz * num_contexts, context_len, -1)
         context_x_reshaped = context_x.permute(0, 3, 1, 2).reshape(batch_sz * num_contexts, context_len, -1)
-        static_s_expanded = static_s.unsqueeze(1).expand(-1, num_contexts, -1).reshape(batch_sz * num_contexts, -1)
-
-        v_i = self.temporal_block(encoder_input, static_s_expanded).mean(dim=1)
+        static_s_reshaped = embedding_context_s.reshape(batch_sz * num_contexts, -1)
+        # Pass through temporal block and take the last LSTM cell output instead of mean
+        v_i = self.temporal_block(encoder_input, static_s_reshaped)[:, -1, :]  # Take last time step
         Vt = v_i.view(batch_sz, num_contexts, -1)
-        k_i = self.temporal_block_key(context_x_reshaped, static_s_expanded).mean(dim=1)
+        k_i = self.temporal_block_key(context_x_reshaped, static_s_reshaped)[:, -1, :]
         Kt = k_i.view(batch_sz, num_contexts, -1)
 
         Vt_prime = self._self_attention(Vt, Vt, Vt)
         Vt_prime_2 = self.ffn2(Vt_prime)
-        qt = self.temporal_block_query(target_x, static_s)
+        
+        qt = self.temporal_block_query(target_x, embedding_target_s)
         representation = self._cross_attention(Kt, Vt_prime_2, qt)
         output = self.ffn(representation)
         norm_output = self.layer_norm(output)

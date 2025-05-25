@@ -47,7 +47,7 @@ class XTrendModel(nn.Module):
         )
         self.embedding = nn.Embedding(num_embeddings=50,embedding_dim=static_dim)
 
-    def forward(self, context_x, context_y, target_x, target_y, static_s, testing=False):
+    def forward(self, target_x, target_y, target_s, context_x_list, context_xi_list, context_s_list, testing=False):
         """
         context_x: (batch, context_len, x_dim, num_contexts)
         context_y: (batch, context_len, y_dim, num_contexts)
@@ -56,23 +56,25 @@ class XTrendModel(nn.Module):
         static_s: (batch, static_dim)
         """
         # Encoder: get Kt, Vt, Vt_prime
-        embedding_s = self.embedding(static_s)
-        encoder_out = self.encoder(context_x, context_y, target_x, embedding_s)
+        context_x_list = context_x_list.permute(0, 2, 3, 1)
+        context_xi_list = context_xi_list.permute(0, 2, 3, 1)
+        embedding_context_s = self.embedding(context_s_list)
+        embedding_target_s = self.embedding(target_s)
         
+        encoder_out = self.encoder(context_x_list, context_xi_list, target_x, embedding_context_s, embedding_target_s)
         if testing:
-            return self.decoder(target_x, target_y, embedding_s, encoder_out, testing=testing)
+            return self.decoder(target_x, target_y, embedding_target_s, encoder_out, testing=testing)
         # Decoder: get outputs
-        sharpe_loss, mu, logsigma = self.decoder(target_x, target_y, embedding_s, encoder_out)
+        sharpe_loss, mu, logsigma = self.decoder(target_x, target_y, embedding_target_s, encoder_out)
         return sharpe_loss, mu, logsigma
 
     def training_step(self, batch, optimizer, alpha=1.0):
         self.train()
-        context_x, context_y, target_x, target_y, static_s = batch
-        sharpe_loss, mu, logsigma = self.forward(context_x, context_y, target_x, target_y, static_s)
-
+        target_x, target_y, target_s, context_x_list, context_xi_list, context_s_list = batch
+        sharpe_loss, mu, logsigma = self.forward(target_x, target_y, target_s, context_x_list, context_xi_list, context_s_list)
         # MLE loss (negative log-likelihood)
         dist = torch.distributions.Normal(mu, torch.exp(logsigma.clamp(min=-10, max = 10)))
-        mle_loss = -dist.log_prob(target_y).mean()
+        mle_loss = -dist.log_prob(target_y.unsqueeze(-1)).mean()
 
         total_loss = sharpe_loss + alpha * mle_loss
 

@@ -10,7 +10,7 @@ MAX_CONTEXT_LEN = 63
 BATCH_SIZE = 32
 NUMPY_DTYPE = np.float32
 CONTEXT_LBW = 63 # TODO: we could experiment with other lookback windows
-CPD_THRESHOLD = 0.995 # threshold for cpd score to be considered a changepoint TODO: we could fine tune this
+CPD_THRESHOLD = 0.95 # threshold for cpd score to be considered a changepoint TODO: we could fine tune this
 CPD_BURN_IN = 5 # minimum distance between leftmost changepoints of contexts
 FEATURES = [
     "norm_daily_return",
@@ -24,7 +24,7 @@ FEATURES = [
 ]
 TEST_YEAR_START = 2015
 TEST_END = 2025
-PINNACLE_ASSETS = [ "AN", "BN", "CA", "CC", "CN", "DA", "DT", "DX", "EN", "ER", "ES", "FB", "FN", "GI", "JN", "JO", "KC", "KW", "LB", "LX", "MD", "MP", "NK", "NR", "SB", "SC", "SN", "SP", "TY", "UB", "US", "XU", "XX", "YM", "ZA", "ZC", "ZF", "ZG", "ZH", "ZI", "ZK", "ZL", "ZN", "ZO", "ZP", "ZR", "ZT", "ZU", "ZW", "ZZ" ]
+PINNACLE_ASSETS = [ "AN", "BN", "CA", "CC", "CN", "DA", "DT", "DX", "EN", "ER", "ES", "FB", "FN", "GI", "JN", "JO", "KC", "KW", "LB", "LX", "MD", "MP", "NK", "NR", "SB", "SC", "SN", "SP", "TY", "UB", "US", "XU", "XX", "YM", "ZA", "ZC", "ZF", "ZG",  "ZI", "ZK", "ZL", "ZN", "ZO", "ZP", "ZR", "ZT", "ZU", "ZW", "ZZ" ]
 # <<<< TODO: DO NOT TOUCH ANYTHING BELOW THIS! I AM WORKING ON IT >>>>
 # %% function split_dataframe
 def split_dataframe(df, max_series=MAX_CONTEXT_LEN, min_series=MIN_CONTEXT_LEN):
@@ -48,7 +48,7 @@ for ticker in (pbar := tqdm(PINNACLE_ASSETS, dynamic_ncols=True)):
 # FOR DEBUG:
 # while(True):
 #     ticker = "AN"
-    features_df = pd.read_csv(f"dataset/FEATURES/{ticker}.csv", parse_dates=["date"])
+    features_df = pd.read_csv(f"features/{ticker}.csv", parse_dates=["date"])
     features_df["next_day_norm_return"] = features_df["norm_daily_return"].shift(-1)
     features_df = features_df[["date"] + FEATURES + ["next_day_norm_return"]]
     features_df.dropna(inplace=True)

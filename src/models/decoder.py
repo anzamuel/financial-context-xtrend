@@ -59,8 +59,10 @@ class Decoder(nn.Module):
             nn.Linear(mle_dim, sharpe_dim),
             nn.Tanh()
         )
+        self.warmup_step = 63
+        self.total_lstm_steps = 126
 
-    def forward(self, target_x, target_y, static_s, encoder_out, testing = False):
+    def forward(self, target_x, target_y, embedding_target_s, encoder_out, testing = False):
         """
         target_x: (batch, target_len, x_dim)
         target_y: (batch, target_len, y_dim)
@@ -69,24 +71,22 @@ class Decoder(nn.Module):
         # VSN block
         batch_size, seq_len, _ = target_x.shape
         target_x_flat = target_x.reshape(-1, target_x.shape[-1])  # (batch * seq_len, x_dim)
-        static_s_flat = static_s.unsqueeze(1).expand(-1, seq_len, -1).reshape(-1, static_s.shape[-1])  # (batch * seq_len, static_dim)
-        vsn_out_flat = self.vsn(target_x_flat, static_s_flat)  # (batch * seq_len, y_dim)
+        embedding_target_s_expanded = embedding_target_s.unsqueeze(1).expand(-1, seq_len, -1)
+        embedding_target_s_reshaped = embedding_target_s_expanded.reshape(-1, embedding_target_s.shape[-1])  # (batch * seq_len, static_dim)
+        vsn_out_flat = self.vsn(target_x_flat, embedding_target_s_reshaped)  # (batch * seq_len, y_dim)
         vsn_out = vsn_out_flat.view(batch_size, seq_len, -1)   # (batch, seq_len, y_dim)
         x_cat = torch.cat([vsn_out, encoder_out], dim=-1)
         # FFN
         x_prime = self.layer_norm_1(self.ffn1(x_cat)) 
         
         # LSTM
-        
         lstm_out, _ = self.lstm(x_prime) 
         a_t = self.layer_norm_2(lstm_out + x_prime)
-        static_expanded = static_s.unsqueeze(1).expand(-1, seq_len, -1)
-        
         # FFN2 outputs mu and sigma
-        last_fnn = self.linear3(self.linear1(a_t)+self.linear2(static_expanded))
+        last_fnn = self.linear3(self.linear1(a_t)+self.linear2(embedding_target_s_expanded))
         mle_out = self.ffn3(self.layer_norm_3(last_fnn+a_t))
         mu, logsigma = torch.chunk(mle_out, 2, dim=-1)  
-        
+            
         sigma = torch.exp(logsigma).clamp(min = -10, max = 10)
         # Reparameterization trick: sample z ~ N(mu, sigma^2)
         if testing:
@@ -96,12 +96,14 @@ class Decoder(nn.Module):
             z = mu + sigma * eps  # (batch, target_len, mle_dim)
         positions = self.sharpe_head(z)  # (batch, target_len, mle_dim)
         
-        captured_positions = target_y * positions
+        target_y = target_y.unsqueeze(-1)
+        captured_positions = target_y*positions
         
         if testing:
             return captured_positions
         
-        captured_positions = captured_positions[:, -1:, :]
+        # Only take values between warmup_step and total_lstm_steps (exclusive)
+        captured_positions = captured_positions[:, self.warmup_step:self.total_lstm_steps, :]
         
         sharpe = (
             torch.mean(captured_positions) / (torch.std(captured_positions) + 1e-9)
