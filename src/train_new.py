@@ -110,13 +110,13 @@ for it in range(ITERATIONS):
         captured_returns = sharpe_loss[:, -1, 0].tolist()
         all_returns += zip(target_s, captured_returns)
 
-        if VAL_DIVERSIFIED_SHARPE:
-            diversified = (
-                pd.DataFrame(all_returns, columns=["ticker", "captured_returns"])
-                .groupby("ticker")["captured_returns"]
-                .sum()
-            )
-            val_sharpe = diversified.mean() * np.sqrt(252) / diversified.std()
-            # print(valid_sharpes)
-            print("Div Valid Sharpe: ", val_sharpe)
-            print("Valid Single Sharpe: ", np.mean(valid_sharpes))
+    if VAL_DIVERSIFIED_SHARPE:
+        diversified = (
+            pd.DataFrame(all_returns, columns=["ticker", "captured_returns"])
+            .groupby("ticker")["captured_returns"]
+            .sum()
+        )
+        val_sharpe = diversified.mean() * np.sqrt(252) / diversified.std()
+        # print(valid_sharpes)
+        print("Div Valid Sharpe: ", val_sharpe)
+        print("Valid Single Sharpe: ", np.mean(valid_sharpes))
