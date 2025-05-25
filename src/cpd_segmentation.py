@@ -18,7 +18,6 @@ CONTEXT_LBW = 21
 MIN_CONTEXT_LEN = 5
 MAX_CONTEXT_LEN = 63
 CPD_THRESHOLD = 0.95
-NUMPY_DTYPE = np.float32
 FEATURE_COLS = [
     "norm_daily_return",
     "norm_monthly_return",
