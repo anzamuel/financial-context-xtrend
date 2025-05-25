@@ -22,15 +22,15 @@ class Encoder(nn.Module):
     ):
         super().__init__()
         self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
-        
+
         self.input_dim = x_dim + y_dim
         self.x_dim = x_dim
         self.y_dim = y_dim
         self.n_heads = n_heads
         self.hidden_dim = ffn_dim
         self.embedding_dim = embedding_dim
-        
-        
+
+
         self.temporal_block = TemporalBlock(
             input_dim=self.input_dim,
             static_dim=static_dim,
@@ -47,7 +47,7 @@ class Encoder(nn.Module):
             ffn_hidden_dim=ffn_dim,
             dropout=dropout,
         )
-        
+
         self.temporal_block_query = TemporalBlock(
             input_dim=x_dim,
             static_dim=static_dim,
@@ -69,14 +69,14 @@ class Encoder(nn.Module):
             attention_type=cross_attention_type,
             n_heads=n_heads,
         )
-        
+
         self.ffn2 = nn.Sequential(
             nn.Linear(self.hidden_dim, self.hidden_dim),
             nn.ELU(),
             nn.Dropout(dropout),
             nn.Linear(self.hidden_dim, self.hidden_dim)
         )
-        
+
         self.ffn = nn.Sequential(
             nn.Linear(self.hidden_dim, self.hidden_dim),
             nn.ELU(),
@@ -86,7 +86,7 @@ class Encoder(nn.Module):
         self.layer_norm = nn.LayerNorm(self.hidden_dim)
 
 
-    def forward(self, context_x, context_xi, target_x=None, 
+    def forward(self, context_x, context_xi, target_x=None,
         embedding_context_s = None, embedding_target_s=None):
         batch_sz, context_len, _, num_contexts = context_x.shape
 
@@ -102,7 +102,7 @@ class Encoder(nn.Module):
 
         Vt_prime = self._self_attention(Vt, Vt, Vt)
         Vt_prime_2 = self.ffn2(Vt_prime)
-        
+
         qt = self.temporal_block_query(target_x, embedding_target_s)
         representation = self._cross_attention(Kt, Vt_prime_2, qt)
         output = self.ffn(representation)

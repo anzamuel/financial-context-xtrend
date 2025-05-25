@@ -60,7 +60,7 @@ class XTrendModel(nn.Module):
         context_xi_list = context_xi_list.permute(0, 2, 3, 1)
         embedding_context_s = self.embedding(context_s_list)
         embedding_target_s = self.embedding(target_s)
-        
+
         encoder_out = self.encoder(context_x_list, context_xi_list, target_x, embedding_context_s, embedding_target_s)
         if testing:
             return self.decoder(target_x, target_y, embedding_target_s, encoder_out, testing=testing)
@@ -84,9 +84,8 @@ class XTrendModel(nn.Module):
         optimizer.step()
         return total_loss.item(), sharpe_loss.item(), mle_loss.item()
 
-    def evaluate(self, batch, alpha=1.0):
+    def evaluate(self, batch):
         self.eval()
         with torch.no_grad():
-            context_x, context_y, target_x, target_y, static_s = batch
-            return self.forward(context_x, context_y, target_x, target_y, static_s, testing=True)
-            
+            target_x, target_y, target_s, context_x_list, context_xi_list, context_s_list = batch
+            return self.forward(target_x, target_y, target_s, context_x_list, context_xi_list, context_s_list, testing=True)

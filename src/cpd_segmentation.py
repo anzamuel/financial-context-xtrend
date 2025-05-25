@@ -30,7 +30,8 @@ FEATURE_COLS = [
     "macd_32_96"
 ]
 VALUE_COL = "next_day_norm_return"
-TEST_YEAR_START = 2015
+VALID_YEAR_START = 2015
+TEST_YEAR_START = 2020
 PINNACLE_ASSETS = [ "AN", "BN", "CA", "CC", "CN", "DA", "DT", "DX", "EN", "ER", "ES", "FB", "FN", "GI", "JN", "JO", "KC", "KW", "LB", "LX", "MD", "MP", "NK", "NR", "SB", "SC", "SN", "SP", "TY", "UB", "US", "XU", "XX", "YM", "ZA", "ZC", "ZF", "ZG", "ZH", "ZI", "ZK", "ZL", "ZN", "ZO", "ZP", "ZR", "ZT", "ZU", "ZW", "ZZ" ]
 # PINNACLE_ASSETS_TRAIN = ["CC", "DA", "LB", "SB", "ZA", "ZC", "ZF", "ZI", "ZO", "ZR", "ZU", "ZW", "ZZ", "EN", "ES", "MD", "SC", "SP", "XX", "YM", "DT", "FB", "TY", "UB", "US", "AN", "DX", "FN", "JN", "SN"]
 # PINNACLE_ASSETS_TEST = ["GI", "JO", "KC", "KW", "NR", "ZG", "ZH", "ZK", "ZL", "ZN", "ZP", "ZT", "CA", "ER", "LX", "NK", "XU", "BN", "CN", "MP"]
@@ -114,9 +115,10 @@ def plot_segmented_close_prices(ticker, features_df, regimes):
 
 
 def create_targets_and_contexts(target_len = 126, write_to_disk = False, draw_plots = False):
-    targets = {}
+    targets_train = {}
+    targets_valid = {}
     contexts = []
-    context_definitions, target_definitions = [], []
+    context_definitions, target_definitions_train, target_definitions_valid = [], [], []
     ticker_pbar = tqdm(PINNACLE_ASSETS, dynamic_ncols=True)
     for ticker in ticker_pbar:
         ticker_pbar.set_description(ticker)
@@ -124,24 +126,26 @@ def create_targets_and_contexts(target_len = 126, write_to_disk = False, draw_pl
         # %% RUN TASKS
         features_df = pd.read_csv(f"dataset/FEATURES/{ticker}.csv", parse_dates=["date"])
         features_df[VALUE_COL] = features_df["norm_daily_return"].shift(-1)
-        features_df = features_df[features_df.date <= dt.datetime(TEST_YEAR_START, 1, 1)]
-        if features_df.empty:
-            tqdm.write(f"Warning: Ticker {ticker} has no data before year {TEST_YEAR_START}. Skipping.")
+        features_df = features_df[["date", "close"] + FEATURE_COLS + [VALUE_COL]] # TODO: remove as unnecessary?
+        #features_df.dropna(inplace=True) TODO last row has no "norm_daily_return"
+
+        selection_mask_train = features_df.date < dt.datetime(VALID_YEAR_START, 1, 1)
+        if not selection_mask_train.any():
+            tqdm.write(f"Warning: Ticker {ticker} has no data before year {VALID_YEAR_START}. Skipping.")
             continue
-        features_df = features_df[features_df.date < dt.datetime(TEST_YEAR_START, 1, 1)]
-        features_df = features_df[["date", "close"] + FEATURE_COLS + [VALUE_COL]]
-        #features_df.dropna(inplace=True)
+        selection_mask_valid = (features_df.date >= dt.datetime(VALID_YEAR_START, 1, 1)) & (features_df.date < dt.datetime(TEST_YEAR_START, 1, 1))
 
         # CREATE TARGETS
-        targets_df = features_df.copy()
-        targets_df = targets_df[["date"] + FEATURE_COLS + [VALUE_COL]]
-        targets[ticker] = targets_df
+        # train
+        targets_train_df = features_df[selection_mask_train].copy()
+        targets_train_df = targets_train_df[["date"] + FEATURE_COLS + [VALUE_COL]]
+        targets_train[ticker] = targets_train_df
 
-        for end_idx in range(target_len - 1 , len(targets_df)):
-            target_definitions.append({
+        for end_idx in range(target_len - 1 , len(targets_train_df)):
+            target_definitions_train.append({
                 "ticker": ticker,
                 "end_idx": end_idx,
-                "end_date": targets_df["date"][end_idx]
+                "end_date": targets_train_df["date"].iloc[end_idx]
             })
 
         if write_to_disk:
@@ -149,7 +153,30 @@ def create_targets_and_contexts(target_len = 126, write_to_disk = False, draw_pl
             os.makedirs(base_dir, exist_ok=True)
             file_name = f"target_{ticker}.parquet"
             file_path = os.path.join(base_dir, file_name)
-            targets_df.to_parquet(file_path)
+            targets_train_df.to_parquet(file_path)
+
+        # validation
+        targets_valid_df = features_df[selection_mask_valid].copy()
+        targets_valid_df = targets_valid_df[["date"] + FEATURE_COLS + [VALUE_COL]]
+        targets_valid[ticker] = targets_valid_df
+
+        for end_idx in range(target_len - 1 , len(targets_valid_df)):
+            target_definitions_valid.append({
+                "ticker": ticker,
+                "end_idx": end_idx,
+                "end_date": targets_valid_df["date"].iloc[end_idx]
+            })
+
+        if write_to_disk:
+            base_dir = "dataset_targets"
+            os.makedirs(base_dir, exist_ok=True)
+            file_name = f"target_{ticker}.parquet"
+            file_path = os.path.join(base_dir, file_name)
+            targets_valid_df.to_parquet(file_path)
+
+        # CREATE CONTEXTS
+        # TODO: As of now we just use train contexts
+        features_df = features_df[selection_mask_train]
 
         changepoints_df = pd.read_csv(f"dataset/CPD/{CONTEXT_LBW}/{ticker}.csv", parse_dates=["date"])
         changepoints_df.ffill(inplace=True)
@@ -245,7 +272,7 @@ def create_targets_and_contexts(target_len = 126, write_to_disk = False, draw_pl
         if draw_plots:
             plot_segmented_close_prices(ticker, features_df, regimes)
 
-    return targets, target_definitions, contexts, context_definitions, PINNACLE_ASSETS, FEATURE_COLS, VALUE_COL
+    return targets_train, target_definitions_train, contexts, context_definitions, targets_valid, target_definitions_valid, PINNACLE_ASSETS, FEATURE_COLS, VALUE_COL
 
 if __name__ == "__main__":
-    create_targets_and_contexts(write_to_disk = True, draw_plots = True)
+    create_targets_and_contexts(write_to_disk = False, draw_plots = False)

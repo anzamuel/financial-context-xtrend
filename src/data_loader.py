@@ -6,7 +6,6 @@ MAX_CONTEXT_LEN_PAPER = 63  # Max segment length from paper (e.g., 3-month)
 CONTEXT_LBW_PAPER = 21      # CPD lookback window (from paper's Appendix A) [cite: 381]
 FIXED_MAX_CONTEXT_LEN = MAX_CONTEXT_LEN_PAPER + CONTEXT_LBW_PAPER # 63 + 21 = 84
 
-
 def xtrend_collate_fn(batch):
     target_x_batch = torch.stack([item["target_x"] for item in batch], dim=0)
     target_y_batch = torch.stack([item["target_y"] for item in batch], dim=0)
@@ -57,10 +56,10 @@ def xtrend_collate_fn(batch):
         "actual_context_lens": actual_context_lens_collated # (batch_size, num_ctx)
     }
 
-# if __name__ == "__main__":
-#     dataset = XTrendDataset()
-#     dataloader = DataLoader(dataset, batch_size=4, collate_fn=xtrend_collate_fn)
+if __name__ == "__main__":
+    dataset = XTrendDataset()
+    dataloader = DataLoader(dataset, batch_size=4, collate_fn=xtrend_collate_fn, shuffle=True)
 
-#     sample = next(iter(dataloader))
-#     for key, value in sample.items():
-#         print(f"{key} shape: {list(value.shape)}")
+    sample = next(iter(dataloader))
+    for key, value in sample.items():
+        print(f"{key} shape: {list(value.shape)}")
