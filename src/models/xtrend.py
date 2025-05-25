@@ -84,7 +84,7 @@ class XTrendModel(nn.Module):
         optimizer.step()
         return total_loss.item(), sharpe_loss.item(), mle_loss.item()
 
-    def evaluate(self, batch, alpha=1.0):
+    def evaluate(self, batch):
         self.eval()
         with torch.no_grad():
             context_x, context_y, target_x, target_y, static_s = batch

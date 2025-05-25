@@ -95,7 +95,7 @@ for it in range(ITERATIONS):
         context_s_list = batch["context_s_padded"].to(device)
 
         sharpe_loss = model.evaluate(
-            (target_x, target_y, target_s, context_x_list, context_xi_list, context_s_list), optimizer, alpha=1.0
+            (target_x, target_y, target_s, context_x_list, context_xi_list, context_s_list)
         )
         captured_returns = sharpe_loss
         if captured_returns.shape[0] == BATCH_SIZE:
