@@ -30,9 +30,9 @@ FEATURE_COLS = [
     "macd_32_96"
 ]
 VALUE_COL = "next_day_norm_return"
-TEST_YEAR_START = 2015
-TEST_YEAR_END = 2020
-PINNACLE_ASSETS = [ "AN", "BN", "CA", "CC", "CN", "DA", "DT", "DX", "EN", "ER", "ES", "FB", "FN", "GI", "JN", "JO", "KC", "KW", "LB", "LX", "MD", "MP", "NK", "NR", "SB", "SC", "SN", "SP", "TY", "UB", "US", "XU", "XX", "YM", "ZA", "ZC", "ZF", "ZG", "ZH", "ZI", "ZK", "ZL", "ZN", "ZO", "ZP", "ZR", "ZT", "ZU", "ZW", "ZZ" ]
+TEST_YEAR_START = 2012
+TEST_YEAR_END = 2023
+PINNACLE_ASSETS = [ "AN", "BN", "CA", "CC", "CN", "DA", "DT", "DX", "EN", "ER", "ES", "FB", "FN", "GI", "JN", "JO", "KC", "KW", "LB", "LX", "MD", "MP", "NK", "NR", "SB", "SC", "SN", "SP", "TY", "UB", "US", "XU", "XX", "YM", "ZA", "ZC", "ZF", "ZG",  "ZI", "ZK", "ZL", "ZN", "ZO", "ZP", "ZR", "ZT", "ZU", "ZW", "ZZ" ]
 # PINNACLE_ASSETS_TRAIN = ["CC", "DA", "LB", "SB", "ZA", "ZC", "ZF", "ZI", "ZO", "ZR", "ZU", "ZW", "ZZ", "EN", "ES", "MD", "SC", "SP", "XX", "YM", "DT", "FB", "TY", "UB", "US", "AN", "DX", "FN", "JN", "SN"]
 # PINNACLE_ASSETS_TEST = ["GI", "JO", "KC", "KW", "NR", "ZG", "ZH", "ZK", "ZL", "ZN", "ZP", "ZT", "CA", "ER", "LX", "NK", "XU", "BN", "CN", "MP"]
 # assert set(PINNACLE_ASSETS) == set(PINNACLE_ASSETS_TRAIN + PINNACLE_ASSETS_TEST)

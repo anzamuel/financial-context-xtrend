@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from empyrical import annual_volatility
 from typing import List, Tuple
+import torch
 
 # List of all futures symbols
 PINNACLE_ASSETS = [
@@ -146,7 +147,7 @@ def calc_trend_intermediate_strategy(
 
     return next_day_returns
 
-def tsmom_strategy(assets, w=0, volatility_scaling=True):
+def tsmom_strategy(assets):
     returns = []
     for symbol in assets:
         df = load_single_asset(symbol)
@@ -184,6 +185,45 @@ def plot_cumulative_returns(returns_dict, log_scale=True):
     plt.tight_layout()
     plt.show()
 
+def backtest_xtrend():
+    returns_df = pd.read_csv("predicted_returns.csv").fillna(0)
+
+    # Use trading dates from a real asset (e.g., ES)
+    ref_asset = load_single_asset("ES")
+    trading_dates = ref_asset.index[ref_asset.index >= START_DATE]
+    n_dates = len(trading_dates)
+
+    # Enforce: number of rows in group must match n_dates
+    ticker_dfs = []
+
+    for ticker, group in returns_df.groupby("ticker"):
+        predicted_returns = group["predicted_return"].values
+
+        # Truncate or pad to exactly n_dates
+        if len(predicted_returns) < n_dates:
+            predicted_returns = np.pad(predicted_returns, (n_dates - len(predicted_returns), 0), constant_values=0)
+        elif len(predicted_returns) > n_dates:
+            predicted_returns = predicted_returns[-n_dates:]
+
+        df = pd.DataFrame({
+            "date": trading_dates,
+            f"ticker_{ticker}": predicted_returns
+        })
+        ticker_dfs.append(df)
+
+    # Merge all ticker dataframes by date
+    merged_df = ticker_dfs[0]
+    for df in ticker_dfs[1:]:
+        merged_df = merged_df.merge(df, on="date", how="outer")
+
+    merged_df = merged_df.fillna(0).sort_values("date")
+    merged_df.set_index("date", inplace=True)
+
+    # Average across tickers
+    merged_df["mean_return"] = merged_df.mean(axis=1)
+
+    return merged_df["mean_return"]
+
 
 if __name__ == "__main__":
     # 1) Long-only equal weighted portfolio
@@ -197,12 +237,19 @@ if __name__ == "__main__":
 
     # 3) TSMOM strategy portfolio
     tsmom_returns = tsmom_strategy(PINNACLE_ASSETS)
+    scaled_tsmom = rescale_to_target_vol_by_mean_asset_vol(tsmom_returns)
+    
+    # 4) XTrend model portfolio
+    xtrend_returns = backtest_xtrend()
+    print(xtrend_returns.head())
+    scaled_xtrend = rescale_to_target_vol_by_mean_asset_vol(xtrend_returns)
 
     # Plot all cumulative returns together
     plt.figure(figsize=(12, 6))
     plt.plot((1 + scaled_long_only).cumprod(), label="Long-only Equal Weight")
     plt.plot((1 + scaled_macd).cumprod(), label="MACD Strategy")
-    plt.plot((1 + tsmom_returns).cumprod(), label="TSMOM Strategy")
+    plt.plot((1 + scaled_tsmom).cumprod(), label="TSMOM Strategy")
+    plt.plot((1 + scaled_xtrend).cumprod(), label="XTrend Model")
     plt.yscale("log")
     plt.xlabel("Date")
     plt.ylabel("Portfolio Value ($)")
@@ -211,3 +258,4 @@ if __name__ == "__main__":
     plt.grid(True)
     plt.tight_layout()
     plt.show()
+    
