@@ -1,3 +1,5 @@
 *.pkl
 *cache*
 *.csv
+runs/
+pyrightconfig.json
