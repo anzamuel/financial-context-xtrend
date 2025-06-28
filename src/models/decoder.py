@@ -99,13 +99,14 @@ class Decoder(nn.Module):
         target_y = target_y.unsqueeze(-1)
         captured_positions = target_y*positions
 
-        if testing:
-            return captured_positions
-
         # Only take values between warmup_step and total_lstm_steps (exclusive)
-        captured_positions = captured_positions[:, self.warmup_step:self.total_lstm_steps, :]
+        captured_positions = captured_positions[:, self.warmup_step:self.total_lstm_steps, :] # TODO: CHECK WARMUP STEP IMPLEMENTATION
 
         sharpe = (
             torch.mean(captured_positions) / (torch.std(captured_positions) + 1e-9)
         ) * np.sqrt(252.0)
+
+        if testing:
+            return -sharpe, positions
+
         return -sharpe, mu, logsigma

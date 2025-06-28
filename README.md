@@ -8,3 +8,10 @@ TODO:
 - implement warmup steps
 - check validation
 - use framework for ML experiments
+
+IMPORTANT:
+- only train on every 63 days (target)
+- make it so that validation uses new contexts
+- simplify the model architecture, reduce parameters, avoid overfitting
+- learn `h_0` and `c_0` of the LSTMs on a per asset basis
+- test the non-XTrend LSTM to have a baseline
