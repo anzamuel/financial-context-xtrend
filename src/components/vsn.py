@@ -26,7 +26,7 @@ class VSN(nn.Module):
 
         self.linear1 = nn.Linear(input_dim, hidden_dim)
         self.linear2 = nn.Linear(static_dim, hidden_dim)
-        
+
         self.linear3 = nn.Sequential(
             nn.ELU(),
             nn.Linear(hidden_dim, input_dim)
@@ -61,5 +61,5 @@ if __name__=="__main__":
     s = torch.randn(32, 8)          # optional static embedding
     vsn = VSN(input_dim=10, hidden_dim=64, static_dim=8)
 
-    output = vsn(x_t, s)            
+    output = vsn(x_t, s)
     print(output)

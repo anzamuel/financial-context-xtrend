@@ -10,8 +10,8 @@ class AttnLinear(nn.Module):
     def forward(self, x):
         x = self.linear(x)
         return x
-    
-    
+
+
 
 class Attention(nn.Module):
     def __init__(
@@ -49,7 +49,7 @@ class Attention(nn.Module):
     def forward(self, k, v, q):
         rep = self._attention_func(k, v, q)
         return rep
-    
+
     def _dot_attention(self, k, v, q):
         scale = q.size(-1) ** 0.5
         attn_scores = torch.matmul(q, k.transpose(-2, -1)) / scale  # (B, T_q, T_k)
@@ -64,7 +64,7 @@ class Attention(nn.Module):
             q_i = self._W_q[i](q)
             head = self._dot_attention(k_i, v_i, q_i)
             heads.append(head)
-            
+
         concat = torch.cat(heads, dim=-1)
         return self._W_out(concat)
 

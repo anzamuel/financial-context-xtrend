@@ -1,7 +1,7 @@
 import torch
 from torch import nn
-from models.attention import Attention
-from models.temporal_block import TemporalBlock
+from components.attention import Attention
+from components.temporal_block import TemporalBlock
 
 
 class Encoder(nn.Module):

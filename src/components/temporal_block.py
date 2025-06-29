@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from models.vsn import VSN
+from components.vsn import VSN
 
 class TemporalBlock(nn.Module):
     def __init__(self, input_dim, static_dim, vsn_hidden_dim, lstm_hidden_dim, ffn_hidden_dim, dropout = 0.5):
@@ -16,24 +15,24 @@ class TemporalBlock(nn.Module):
         )
 
         self.layer_norm_1 = nn.LayerNorm(lstm_hidden_dim)
-        
+
         self.ffn_3 = nn.Sequential(
             nn.Linear(static_dim, lstm_hidden_dim),
             nn.ELU(),
             nn.Dropout(p=dropout),
             nn.Linear(lstm_hidden_dim, lstm_hidden_dim)
         )
-        
+
         self.ffn_4 = nn.Sequential(
             nn.Linear(static_dim, lstm_hidden_dim),
             nn.ELU(),
             nn.Dropout(p=dropout),
             nn.Linear(lstm_hidden_dim, lstm_hidden_dim)
         )
-        
+
         self.linear1 = nn.Linear(lstm_hidden_dim, ffn_hidden_dim)
         self.linear2 = nn.Linear(static_dim, ffn_hidden_dim)
-        
+
         self.linear3 = nn.Sequential(
             nn.ELU(),
             nn.Linear(ffn_hidden_dim, ffn_hidden_dim)
@@ -53,7 +52,7 @@ class TemporalBlock(nn.Module):
         vsn_out_flat = self.vsn(x_flat, s_expanded)  # (batch * seq_len, vsn_hidden_dim)
         x_prime = vsn_out_flat.view(batch_size, seq_len, -1)  # (batch, seq_len, vsn_hidden_dim)
 
-        
+
         h_0, c_0 = (self.ffn_3(s), self.ffn_4(s))
         h_0 = h_0.unsqueeze(0)
         c_0 = c_0.unsqueeze(0)
@@ -62,7 +61,7 @@ class TemporalBlock(nn.Module):
 
         residual_added = lstm_out + x_prime  # assuming same dims
         a_t = self.layer_norm_1(residual_added)  # (batch, seq_len, lstm_hidden_dim)
-        
+
         static_expanded = s.unsqueeze(1).expand(-1, a_t.size(1), -1)
         ffn_out = self.linear3(self.linear1(a_t)+self.linear2(static_expanded))
 

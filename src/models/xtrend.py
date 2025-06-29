@@ -1,7 +1,7 @@
 import torch
 from torch import nn
-from models.encoder import Encoder
-from models.decoder import Decoder
+from components.encoder import Encoder
+from components.decoder import Decoder
 
 class XTrendModel(nn.Module):
     def __init__(

@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 import numpy as np
-from models.vsn import VSN
+from components.vsn import VSN
 
 class Decoder(nn.Module):
     def __init__(
