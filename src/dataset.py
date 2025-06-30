@@ -4,7 +4,6 @@ from torch.utils.data import Dataset
 import random
 from tqdm.auto import tqdm
 import pandas as pd
-import polars as pl
 import datetime as dt
 import multiprocessing as mp
 
@@ -32,6 +31,7 @@ WARMUP_PERIOD_LEN = 63 # $l_s = 63$
 TARGET_LEN = 126 # $l_t = 126$
 CONTEXT_SAMPLE_SIZE = 20 # $\abs{\mathcal{C}} = 20$
 
+# TODO: base every dataframe on polars
 def _cpd_segmentation(features_df):
     min_t, max_t = int(features_df.index.min()), int(features_df.index.max())
     regimes = []
@@ -164,10 +164,11 @@ class XTrendDataset(Dataset):
             print("Info: Loading raw price data")
             for ticker in PINNACLE_ASSETS:
                 try:
-                    self.price_data[ticker] = pl.read_csv(
-                        f"dataset/CLCDATA/{ticker}_RAD.CSV", has_header=False,
-                        new_columns=["date", "open", "high", "low", "close", "volume", "open_interest"],
-                        try_parse_dates=True
+                    pd.read_csv(
+                        f"dataset/CLCDATA/{ticker}_RAD.CSV",
+                        header=None,
+                        names=["date", "open", "high", "low", "close", "volume", "open_interest"],
+                        parse_dates=["date"]
                     )
                 except Exception:
                     print(f"Warning: Could not load price data for ticker {ticker}.")
@@ -295,8 +296,8 @@ class XTrendDataset(Dataset):
         context_s_indices = self.context_s[sampled_indices]
 
         item_metadata['context_tickers'] = [self.idx_to_ticker[int(s.item())] for s in context_s_indices]
-        item_metadata['context_start_dates'] = [dt.datetime.fromordinal(ts.item()) for ts in self.context_start_dates[sampled_indices]]
-        item_metadata['context_end_dates'] = [dt.datetime.fromordinal(ts.item()) for ts in self.context_end_dates[sampled_indices]]
+        item_metadata['context_start_dates'] = [dt.datetime.fromordinal(int(ts.item())) for ts in self.context_start_dates[sampled_indices]]
+        item_metadata['context_end_dates'] = [dt.datetime.fromordinal(int(ts.item())) for ts in self.context_end_dates[sampled_indices]]
 
         self._output_sampled_indices = output_sampled_indices
 
