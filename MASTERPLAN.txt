@@ -47,3 +47,18 @@ We should disregard the joint losses, only focus on optimizing sharpe.
   - Joint losses
 6. Future work
 7. References
+
+
+
+TODO for paper:
+
+Abstract -> Refine a bit
+Introduction -> good
+Preliminary notation -> Add attention mechanism and make sure we are not missing any info ftom the paper
+Data and feature engineering -> CHnage the plots from cartoon to nicer
+Dataset overview -> Francesco will take care of explain a bit better the dataset
+CPD -> check general, make sure no information forgotten, SAMUEL NEEDS TO UPDATE THE ALGO, MAKE SURE THE INPUT FEATURES MATCH THE ACTUAL ONES
+Modeling approach -> figure out how you want to name it and if you want to add any extra info
+Results -> do the table with the sharpe, turnover , downturn for xtrend
+Contributions -> write this and write it well very important
+Conclusion and future work -> write about futur work and figure out a nice conclusion.
