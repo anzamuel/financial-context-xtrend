@@ -4,25 +4,24 @@ import numpy as np
 import matplotlib.pyplot as plt
 from typing import List, Tuple
 import torch
-from models.xtrend import XTrendModel
-from dataset import XTrendDataset
+from src.models.xtrend import XTrendModel
+from src.dataset import XTrendDataset, FEATURE_COLS, PINNACLE_ASSETS
 from torch.utils.data import DataLoader
 from tqdm import tqdm, trange
 from torch.utils.data import Dataset
 import datetime as dt
 
-from dataset import PINNACLE_ASSETS
-from train import TRAIN_START, TRAIN_END
+from src.train import TRAIN_START, TRAIN_END, EVAL_START, EVAL_END, EMBEDDING_DIM, D_H, N_HEADS, DROPOUT, WARMUP_PERIOD_LEN
 
 DATA_DIR = "dataset/CLCDATA"  # Adjust path as needed
-TEST_START = dt.datetime(2013, 1, 1)
-EXTENDED_START_DATE = dt.datetime(2012, 1, 1)
-TEST_END = dt.datetime(2023, 1, 1)
+TEST_START = EVAL_START
+EXTENDED_START_DATE = EVAL_START.replace(year=EVAL_START.year - 1)
+TEST_END = EVAL_END
 TARGET_VOL = 0.15  # Target annual volatility
 VOL_LOOKBACK = 60
 TRAIN_STRIDE = 1
 BATCH_SIZE = 512
-MODEL_PATH = "runs/model.pth"
+MODEL_PATH = "runs/final_model.pth"
 
 def load_single_asset(symbol):
     filepath = os.path.join(DATA_DIR, f"{symbol}_RAD.CSV")
@@ -215,21 +214,14 @@ def collate_with_metadata(batch):
 
 def backtest_xtrend():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    hidden_dim = 64
     model = XTrendModel(
-        x_dim=8,
-        y_dim=1,
-        static_dim=8,
-        encoder_hidden_dim=hidden_dim,
-        vsn_dim=hidden_dim,
-        ffn_dim=hidden_dim,
-        lstm_hidden_dim=hidden_dim,
-        n_heads=4,
-        sharpe_dim=1,
-        mle_dim=1,
-        self_attention_type="ptmultihead",
-        cross_attention_type="ptmultihead",
-        dropout=0.5
+        num_features=len(FEATURE_COLS),
+        num_embeddings=len(PINNACLE_ASSETS),
+        embedding_dim=EMBEDDING_DIM,
+        d_h=D_H,
+        n_heads=N_HEADS,
+        dropout=DROPOUT,
+        warmup_period_len=WARMUP_PERIOD_LEN
     ).to(device)
     model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
     model.eval()
@@ -278,21 +270,14 @@ def backtest_xtrend():
 
 def single_backtest_xtrend():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    hidden_dim = 64
     model = XTrendModel(
-        x_dim=8,
-        y_dim=1,
-        static_dim=8,
-        encoder_hidden_dim=hidden_dim,
-        vsn_dim=hidden_dim,
-        ffn_dim=hidden_dim,
-        lstm_hidden_dim=hidden_dim,
-        n_heads=4,
-        sharpe_dim=1,
-        mle_dim=1,
-        self_attention_type="ptmultihead",
-        cross_attention_type="ptmultihead",
-        dropout=0.5
+        num_features=len(FEATURE_COLS),
+        num_embeddings=len(PINNACLE_ASSETS),
+        embedding_dim=EMBEDDING_DIM,
+        d_h=D_H,
+        n_heads=N_HEADS,
+        dropout=DROPOUT,
+        warmup_period_len=WARMUP_PERIOD_LEN
     ).to(device)
     model.load_state_dict(torch.load("runs\\runs\\model_state_final.pth", map_location=device))
     model.eval()

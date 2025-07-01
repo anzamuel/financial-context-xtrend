@@ -1,4 +1,3 @@
-from pandas.core.groupby.groupby import T
 import torch
 import numpy as np
 import os
@@ -14,14 +13,14 @@ TRAIN_STRIDE = 1
 TRAIN_START = dt.datetime(1995, 1, 1)
 TRAIN_END = dt.datetime(2010, 1, 1)
 EVAL_START = dt.datetime(2010, 1, 1)
-EVAL_END = dt.datetime(2012, 1, 1)
+EVAL_END = dt.datetime(2011, 1, 1)
 BATCH_SIZE = 512
 ITERATIONS = 200
-LR = 1e-3
+LR = 1e-4
 TRAIN_SUBSET_FRACTION = 0.5
 EARLY_STOPPING_PATIENCE = 10
 D_H = 32
-EMBEDDING_DIM = 8
+EMBEDDING_DIM = 4
 N_HEADS = 4
 DROPOUT = 0.5
 WARMUP_PERIOD_LEN = 63
@@ -84,14 +83,20 @@ def training_loop():
             dataset.set_mode("eval")
             eval_dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=False)
             eval_sharpes = []
-            eval_pbar = tqdm(eval_dataloader, desc=f"EVAL {it} | Sharpe: N/A", leave=False)
-            for eval_batch in eval_pbar:
-                eval_batch = {k: v.to(device) for k, v in eval_batch.items() if isinstance(v, torch.Tensor)}
-                eval_sharpe_loss, _ = model.evaluate(eval_batch)
-                current_eval_sharpe = -eval_sharpe_loss.item()
-                eval_sharpes.append(current_eval_sharpe)
-                avg_eval_sharpe = np.nanmean(eval_sharpes)
-                eval_pbar.set_description(f"EVAL {it} | Sharpe: {avg_eval_sharpe:7.4f}")
+
+            for run_idx in range(10):
+                eval_pbar = tqdm(eval_dataloader, desc=f"EVAL Run {run_idx+1}/10 | Sharpe: N/A", leave=False)
+                current_run_sharpes = [] # Temporary list for current run's sharpes
+                for eval_batch in eval_pbar:
+                    eval_batch = {k: v.to(device) for k, v in eval_batch.items() if isinstance(v, torch.Tensor)}
+                    eval_sharpe_loss, _ = model.evaluate(eval_batch)
+                    current_eval_sharpe = -eval_sharpe_loss.item()
+                    current_run_sharpes.append(current_eval_sharpe)
+
+                    avg_eval_sharpe_this_run = np.nanmean(current_run_sharpes)
+                    eval_pbar.set_description(f"EVAL Run {run_idx+1}/10 | Sharpe: {avg_eval_sharpe_this_run:7.4f}")
+
+                eval_sharpes.extend(current_run_sharpes)
 
             avg_epoch_eval_sharpe = np.mean(eval_sharpes)
             all_valid_sharpes.append(avg_epoch_eval_sharpe)
