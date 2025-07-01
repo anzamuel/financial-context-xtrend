@@ -258,14 +258,14 @@ class XTrendDataset(Dataset):
             target_x = self.train_x[idx]
             target_y = self.train_y[idx]
             target_s = self.train_s[idx]
-            sampled_indices = random.sample(range(self.train_context_upper_bound_idx), self.context_sample_size)
+            sampled_indices = random.SystemRandom().sample(range(self.train_context_upper_bound_idx), self.context_sample_size)
         else: # 'eval' mode
             target_x = self.eval_x[idx]
             target_y = self.eval_y[idx]
             target_s = self.eval_s[idx]
             target_date = self.eval_target_end_dates[idx]
             upper_bound_idx = int(torch.searchsorted(self.context_end_dates, target_date).item())
-            sampled_indices = random.sample(range(upper_bound_idx), self.context_sample_size)
+            sampled_indices = random.SystemRandom().sample(range(upper_bound_idx), self.context_sample_size)
 
         context_x = self.context_x[sampled_indices]
         context_xi = self.context_xi[sampled_indices]
