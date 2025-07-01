@@ -1,84 +1,143 @@
 import torch
-from torch import nn
-from components.encoder import Encoder
-from components.decoder import Decoder
+import torch.nn as nn
+from src.models.context_encoder import ContextEncoder
+from src.models.target_encoder import TargetEncoder
+from src.models.target_decoder import TargetDecoder
+from src.models.attention import Attention
+from src.models.ptp import PTP
+from src.models.sharpe import SharpeLoss
 
 class XTrendModel(nn.Module):
-    def __init__(
-        self,
-        x_dim,
-        y_dim,
-        static_dim=8,
-        encoder_hidden_dim=64,
-        vsn_dim=64,
-        ffn_dim=64,
-        lstm_hidden_dim=64,
-        n_heads=4,
-        sharpe_dim=64,
-        mle_dim=64,
-        self_attention_type="ptmultihead",
-        cross_attention_type="ptmultihead",
-        dropout=0.5,
-    ):
+    def __init__(self, num_features: int, num_embeddings: int, embedding_dim: int, d_h: int, n_heads: int = 4, dropout: float = 0.5, warmup_period_len: int = 63):
         super().__init__()
-        self.encoder = Encoder(
-            x_dim=x_dim,
-            y_dim=y_dim,
-            hidden_dim_list=[encoder_hidden_dim],
-            embedding_dim=encoder_hidden_dim,
-            self_attention_type=self_attention_type,
-            cross_attention_type=cross_attention_type,
+        self.num_features = num_features
+        self.num_embeddings = num_embeddings
+        self.embedding_dim = embedding_dim
+        self.d_h = d_h
+        self.warmup_period_len = warmup_period_len
+
+        self.key_encoder = ContextEncoder(
+            num_features=num_features,
+            num_embeddings=num_embeddings,
+            embedding_dim=embedding_dim,
+            d_h=d_h,
+            dropout=dropout
+        )
+        self.value_encoder = ContextEncoder(
+            num_features=num_features + 1, # For the additional value column in xi
+            num_embeddings=num_embeddings,
+            embedding_dim=embedding_dim,
+            d_h=d_h,
+            dropout=dropout
+        )
+        self.query_encoder = TargetEncoder(
+            num_features=num_features,
+            num_embeddings=num_embeddings,
+            embedding_dim=embedding_dim,
+            d_h=d_h,
+            dropout=dropout
+        )
+        self.cross_attention = Attention(
+            hidden_dim=d_h,
+            attention_type="ptmultihead",
             n_heads=n_heads,
-            static_dim=static_dim,
-            vsn_dim=vsn_dim,
-            ffn_dim=ffn_dim,
-            lstm_hidden_dim=lstm_hidden_dim,
             dropout=dropout
         )
-        self.decoder = Decoder(
-            x_dim=x_dim,
-            y_dim=y_dim,
-            encoder_hidden_dim=encoder_hidden_dim,
-            static_dim=static_dim,
-            ffn_dim=ffn_dim,
-            sharpe_dim=sharpe_dim,
-            mle_dim=mle_dim,
+        self.target_decoder = TargetDecoder(
+            num_features=num_features,
+            num_embeddings=num_embeddings,
+            embedding_dim=embedding_dim,
+            d_h=d_h,
             dropout=dropout
         )
-        self.embedding = nn.Embedding(num_embeddings=50,embedding_dim=static_dim)
+        self.ptp = PTP(input_dim=d_h, d_h=d_h, dropout=dropout)
 
-    def forward(self, target_x, target_y, target_s, context_x, context_xi, context_s, context_lens, testing=False): # TODO: implement context_lens (!)
+    def forward(self, context_x: torch.Tensor, context_xi: torch.Tensor, context_s: torch.Tensor, context_lens: torch.Tensor, target_x: torch.Tensor, target_s: torch.Tensor):
         """
-        context_x: (batch, context_len, x_dim, num_contexts)
-        target_x: (batch, target_len, x_dim)
+        context_x: (batch, sample_size, seq_len, num_features)
+        context_xi: (batch, sample_size, seq_len, num_features + 1)
+        context_s: (batch, sample_size)
+        context_lens: (batch, sample_size)
+        target_x: (batch, target_len, num_features)
+        target_s: (batch,)
+        returns z_seq: (batch, target_len, 1)
         """
-        # Encoder: get Kt, Vt, Vt_prime
-        context_x = context_x.permute(0, 2, 3, 1)
-        context_xi = context_xi.permute(0, 2, 3, 1)
-        embedding_context_s = self.embedding(context_s)
-        embedding_target_s = self.embedding(target_s)
+        batch_size, sample_size, _, _ = context_x.shape
 
-        encoder_out = self.encoder(context_x, context_xi, target_x, embedding_context_s, embedding_target_s)
-        if testing:
-            return self.decoder(target_x, target_y, embedding_target_s, encoder_out, testing=testing)
-        # Decoder: get outputs
-        sharpe_loss, mu, logsigma = self.decoder(target_x, target_y, embedding_target_s, encoder_out)
-        return sharpe_loss, mu, logsigma
+        context_x_flat = context_x.view(batch_size * sample_size, context_x.size(2), context_x.size(3))
+        context_xi_flat = context_xi.view(batch_size * sample_size, context_xi.size(2), context_xi.size(3))
+        context_s_flat = context_s.view(batch_size * sample_size)
+        context_lens_flat = context_lens.view(batch_size * sample_size)
 
-    def training_step(self, batch, optimizer, alpha=1.0):
+        K = self.key_encoder(context_x_flat, context_s_flat, seq_length=context_lens_flat)
+        V = self.value_encoder(context_xi_flat, context_s_flat, seq_length=context_lens_flat)
+
+        K = K.view(batch_size, sample_size, -1)
+        V = V.view(batch_size, sample_size, -1)
+
+        q_seq = self.query_encoder(target_x, target_s)
+
+        y_seq = self.cross_attention(K, V, q_seq)
+
+        decoder_output_seq = self.target_decoder(target_x, target_s, y_seq)
+
+        z_seq = self.ptp(decoder_output_seq)
+
+        return z_seq
+
+    def training_step(self, batch: dict, optimizer: torch.optim.Optimizer):
         self.train()
-        sharpe_loss, mu, logsigma = self.forward(**batch)
-        # MLE loss (negative log-likelihood)
-        dist = torch.distributions.Normal(mu, torch.exp(logsigma.clamp(min=-10, max = 10)))
-        mle_loss = -dist.log_prob(batch["target_y"].unsqueeze(-1)).mean()
-        total_loss = sharpe_loss + alpha * mle_loss
+        z_seq = self.forward(
+            context_x=batch["context_x"], context_xi=batch["context_xi"],
+            context_s=batch["context_s"], context_lens=batch["context_lens"],
+            target_x=batch["target_x"], target_s=batch["target_s"]
+        )
+        loss_fn = SharpeLoss(warmup_period= self.warmup_period_len)
+        loss = loss_fn(z_seq, batch["target_y"])
+
         optimizer.zero_grad()
-        total_loss.backward()
+        loss.backward()
         torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=1.0)
         optimizer.step()
-        return sharpe_loss, mle_loss, total_loss
 
-    def evaluate(self, batch):
+        return loss
+
+    def evaluate(self, batch: dict):
         self.eval()
         with torch.no_grad():
-            return self.forward(**batch, testing=True)
+            z_seq = self.forward(
+                context_x=batch["context_x"], context_xi=batch["context_xi"],
+                context_s=batch["context_s"], context_lens=batch["context_lens"],
+                target_x=batch["target_x"], target_s=batch["target_s"]
+            )
+            loss_fn = SharpeLoss(warmup_period= self.warmup_period_len)
+            loss = loss_fn(z_seq, batch["target_y"])
+        return loss, z_seq
+
+if __name__ == "__main__":
+    d_h = 64
+    embedding_dim = 8
+    num_embeddings = 50
+    num_features = 8
+    batch_size = 4
+    target_len = 126
+    context_sample_size = 20
+    min_context_len = 5
+    max_context_len = 21
+
+    model = XTrendModel(
+        num_features=num_features,
+        num_embeddings=num_embeddings,
+        embedding_dim=embedding_dim,
+        d_h=d_h
+    )
+
+    context_x = torch.randn(batch_size, context_sample_size, max_context_len, num_features)
+    context_xi = torch.randn(batch_size, context_sample_size, max_context_len, num_features + 1)
+    context_s = torch.randint(0, num_embeddings, (batch_size, context_sample_size))
+    context_lens = torch.randint(min_context_len, max_context_len + 1, (batch_size, context_sample_size))
+    target_x = torch.randn(batch_size, target_len, num_features)
+    target_s = torch.randint(0, num_embeddings, (batch_size,))
+
+    z_seq = model(context_x, context_xi, context_s, context_lens, target_x, target_s)
+    print("Final output shape (z_seq):", z_seq.shape)

@@ -1,82 +1,134 @@
+from pandas.core.groupby.groupby import T
 import torch
 import numpy as np
 import os
+import datetime as dt
 from tqdm import tqdm
-from models.xtrend import XTrendModel
-from dataset import XTrendDataset
-from torch.utils.data import DataLoader
+from src.models.xtrend import XTrendModel
+from src.dataset import XTrendDataset, FEATURE_COLS, PINNACLE_ASSETS
+from torch.utils.data import DataLoader, SubsetRandomSampler
+import copy
 
+# --- Training Hyperparameters ---
 TRAIN_STRIDE = 1
+TRAIN_START = dt.datetime(1995, 1, 1)
+TRAIN_END = dt.datetime(2010, 1, 1)
+EVAL_START = dt.datetime(2010, 1, 1)
+EVAL_END = dt.datetime(2012, 1, 1)
 BATCH_SIZE = 512
-ITERATIONS = 10_000
-LR = 1e-3 # 1e-3
+ITERATIONS = 200
+LR = 1e-3
+TRAIN_SUBSET_FRACTION = 0.5
+EARLY_STOPPING_PATIENCE = 10
+D_H = 32
+EMBEDDING_DIM = 8
+N_HEADS = 4
+DROPOUT = 0.5
+WARMUP_PERIOD_LEN = 63
 
-results_dir = 'runs'
-os.makedirs(results_dir, exist_ok=True)
+def training_loop():
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-print(device)
+    dataset = XTrendDataset(
+        train_start=TRAIN_START,
+        train_end=TRAIN_END,
+        eval_start=EVAL_START,
+        eval_end=EVAL_END,
+        train_stride=TRAIN_STRIDE
+    )
 
-dataset = XTrendDataset(train_stride = TRAIN_STRIDE)
-dataloader = DataLoader(dataset, batch_size = BATCH_SIZE, shuffle=True, pin_memory=True)
+    model = XTrendModel(
+        num_features=len(FEATURE_COLS),
+        num_embeddings=len(PINNACLE_ASSETS),
+        embedding_dim=EMBEDDING_DIM,
+        d_h=D_H,
+        n_heads=N_HEADS,
+        dropout=DROPOUT,
+        warmup_period_len=WARMUP_PERIOD_LEN
+    ).to(device)
 
-hidden_dim = 64
-model = XTrendModel(
-    x_dim=8,
-    y_dim=1,
-    static_dim=8,
-    encoder_hidden_dim=hidden_dim,
-    vsn_dim=hidden_dim,
-    ffn_dim=hidden_dim,
-    lstm_hidden_dim=hidden_dim,
-    n_heads=4,
-    sharpe_dim=1,
-    mle_dim=1,
-    self_attention_type="ptmultihead",
-    cross_attention_type="ptmultihead",
-    dropout=0.5
-).to(device)
+    optimizer = torch.optim.Adam(model.parameters(), lr=LR)
 
-optimizer = torch.optim.Adam(model.parameters(), lr=LR)
+    best_valid_sharpe = -np.inf
+    best_model_state = None
+    patience_counter = 0
 
-best_valid_sharpe = 0
-all_train_sharpes = []
-all_train_mle_losses = []
+    all_train_sharpes = []
+    all_valid_sharpes = []
 
-try:
-    for it in range(1, ITERATIONS + 1):
-        print("---")
-        dataset.set_mode("train")
-        train_sharpes = []
-        train_pbar = tqdm(dataloader, desc=f"TRAIN {it} | Sharpe: N/A", leave=True)
-        for train_batch in train_pbar:
-            train_batch = {k: v.to(device) for k, v in train_batch.items()}
-            train_sharpe_loss, _, _ = model.training_step(train_batch, optimizer, alpha=0) # mle_loss and total loss ignored
-            current_train_sharpe = -train_sharpe_loss.numpy(force=True)
-            train_sharpes.append(current_train_sharpe)
-            avg_train_sharpe = np.mean(train_sharpes) # use torch instead of numpy
-            train_pbar.set_description(f"TRAIN {it} | Sharpe: {avg_train_sharpe:7.4f} | Current: {current_train_sharpe:7.4f}")
+    results_dir = 'runs'
+    os.makedirs(results_dir, exist_ok=True)
 
-        dataset.set_mode("eval")
-        eval_sharpes = []
-        eval_pbar = tqdm(dataloader, desc=f"EVAL {it} | Sharpe: N/A", leave=True)
-        for eval_batch in eval_pbar:
-            eval_batch = {k: v.to(device) for k, v in eval_batch.items()}
-            eval_sharpe_loss, _ = model.evaluate(eval_batch) # TODO: look at captured positions
-            current_eval_sharpe = -eval_sharpe_loss.numpy(force=True)
-            eval_sharpes.append(current_eval_sharpe)
-            avg_eval_sharpe = np.mean(eval_sharpes) # use torch instead of numpy
-            eval_pbar.set_description(f"EVAL {it} | Sharpe: {avg_eval_sharpe:7.4f} | Current: {current_eval_sharpe:7.4f}")
+    try:
+        for it in range(1, ITERATIONS + 1):
+            print(f"--- Iteration {it}/{ITERATIONS} ---")
 
-    print("---")
-    print("Training complete.")
+            dataset.set_mode("train")
+            num_train_samples = int(len(dataset) * TRAIN_SUBSET_FRACTION)
+            train_indices = np.random.choice(len(dataset), num_train_samples, replace=False)
+            train_sampler = SubsetRandomSampler(train_indices)
+            train_dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, sampler=train_sampler)
 
-except KeyboardInterrupt:
-    print("---")
-    print("Training interrupted by user.")
-    interrupted_metrics_filename = os.path.join(results_dir, 'metrics_interrupted.npz')
-    interrupted_model_filename = os.path.join(results_dir, 'model_state_interrupted.pth')
-    np.savez(interrupted_metrics_filename, train_sharpes=all_train_sharpes, train_mle_losses=all_train_mle_losses)
-    torch.save(model.state_dict(), interrupted_model_filename)
-    print(f"Saved interrupted metrics to {interrupted_metrics_filename}")
-    print(f"Saved interrupted model state to {interrupted_model_filename}")
+            train_sharpes = []
+            train_pbar = tqdm(train_dataloader, desc=f"TRAIN {it} | Sharpe: N/A", leave=False)
+            for train_batch in train_pbar:
+                train_batch = {k: v.to(device) for k, v in train_batch.items() if isinstance(v, torch.Tensor)}
+                loss = model.training_step(train_batch, optimizer)
+                current_train_sharpe = -loss.item()
+                train_sharpes.append(current_train_sharpe)
+                avg_train_sharpe = np.mean(train_sharpes)
+                train_pbar.set_description(f"TRAIN {it} | Sharpe: {avg_train_sharpe:7.4f}")
+            all_train_sharpes.append(avg_train_sharpe)
+
+            dataset.set_mode("eval")
+            eval_dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=False)
+            eval_sharpes = []
+            eval_pbar = tqdm(eval_dataloader, desc=f"EVAL {it} | Sharpe: N/A", leave=False)
+            for eval_batch in eval_pbar:
+                eval_batch = {k: v.to(device) for k, v in eval_batch.items() if isinstance(v, torch.Tensor)}
+                eval_sharpe_loss, _ = model.evaluate(eval_batch)
+                current_eval_sharpe = -eval_sharpe_loss.item()
+                eval_sharpes.append(current_eval_sharpe)
+                avg_eval_sharpe = np.nanmean(eval_sharpes)
+                eval_pbar.set_description(f"EVAL {it} | Sharpe: {avg_eval_sharpe:7.4f}")
+
+            avg_epoch_eval_sharpe = np.mean(eval_sharpes)
+            all_valid_sharpes.append(avg_epoch_eval_sharpe)
+
+            if avg_epoch_eval_sharpe > best_valid_sharpe:
+                best_valid_sharpe = avg_epoch_eval_sharpe
+                best_model_state = copy.deepcopy(model.state_dict())
+                patience_counter = 0
+                print(f"New best validation Sharpe: {best_valid_sharpe:.4f}")
+            else:
+                patience_counter += 1
+                print(f"Validation Sharpe did not improve. Patience: {patience_counter}/{EARLY_STOPPING_PATIENCE}")
+
+            if patience_counter >= EARLY_STOPPING_PATIENCE:
+                print("Early stopping triggered.")
+                break
+
+    except KeyboardInterrupt:
+        print("\nTraining interrupted by user.")
+
+    finally:
+        if best_model_state:
+            print(f"\nBest validation Sharpe was: {best_valid_sharpe:.4f}")
+            user_input = input("Save best model and metrics? (y/n): ").lower()
+            if user_input == 'y':
+                print("Loading best model state...")
+                model.load_state_dict(best_model_state)
+                final_metrics_filename = os.path.join(results_dir, 'final_metrics.npz')
+                final_model_filename = os.path.join(results_dir, 'final_model.pth')
+                np.savez(final_metrics_filename, train_sharpes=all_train_sharpes, valid_sharpes=all_valid_sharpes)
+                torch.save(model.state_dict(), final_model_filename)
+                print(f"Saved final metrics to {final_metrics_filename}")
+                print(f"Saved final model state to {final_model_filename}")
+            else:
+                print("Save operation cancelled by user.")
+        else:
+            print("\nNo best model to save. Training did not complete a full validation cycle.")
+
+if __name__ == "__main__":
+    training_loop()
